@@ -92,9 +92,13 @@ public class CalendarController : ControllerBase
     /// </summary>
     private Guid GetCurrentUserId()
     {
-        string? value = User.FindFirst("Jellyfin-UserId")?.Value
-                        ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return string.IsNullOrEmpty(value) ? Guid.Empty : Guid.Parse(value);
+        // JF 10.11.x emits ClaimTypes.NameIdentifier; 10.10.x used "Jellyfin-UserId".
+        // Try both for compatibility.
+        string? value = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                        ?? User.FindFirst("Jellyfin-UserId")?.Value;
+        return string.IsNullOrEmpty(value) || !Guid.TryParse(value, out Guid parsed)
+            ? Guid.Empty
+            : parsed;
     }
 
     /// <summary>

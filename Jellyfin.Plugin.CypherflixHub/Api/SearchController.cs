@@ -117,22 +117,14 @@ public class SearchController : ControllerBase
     /// </summary>
     private Guid GetCurrentUserId()
     {
-        string? value = User.FindFirst("Jellyfin-UserId")?.Value
-                        ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return string.IsNullOrEmpty(value) ? Guid.Empty : Guid.Parse(value);
+        // JF 10.11.x emits ClaimTypes.NameIdentifier; 10.10.x used "Jellyfin-UserId".
+        // Try both for compatibility.
+        string? value = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                        ?? User.FindFirst("Jellyfin-UserId")?.Value;
+        return string.IsNullOrEmpty(value) || !Guid.TryParse(value, out Guid parsed)
+            ? Guid.Empty
+            : parsed;
     }
-
-    /// <summary>
-    /// True if the calling user is a Jellyfin administrator. Not used by this
-    /// controller (Search is open to any authed user) but kept as a private
-    /// helper so the controller follows the same shape as the other
-    /// CypherflixHub controllers — mirrors <c>JELLYFIN-INTEGRATION.md §1.3</c>.
-    /// </summary>
-    private bool IsAdmin() =>
-        string.Equals(
-            User.FindFirst("Jellyfin-IsAdministrator")?.Value,
-            "true",
-            StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Parse a CSV of <see cref="MediaType"/> enum names into a set. Returns

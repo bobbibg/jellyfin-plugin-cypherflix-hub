@@ -23,11 +23,12 @@ namespace Jellyfin.Plugin.CypherflixHub.Api;
 ///   <item><description><c>DELETE /CypherflixHub/Providers/{id}</c>  — remove an instance.</description></item>
 ///   <item><description><c>POST   /CypherflixHub/Providers/Test</c>  — test a connection without saving.</description></item>
 /// </list>
-/// All endpoints use bare <c>[Authorize]</c> + manual claim parsing
-/// (see <c>JELLYFIN-INTEGRATION.md</c> §1.3 — <c>[Authorize(Policy="DefaultAuthorization")]</c>
-/// 500s on JF 10.10/10.11). Admin-only actions check
-/// <c>Jellyfin-IsAdministrator</c> manually and return <see cref="ForbidResult"/>
-/// when absent.
+/// All admin endpoints use <c>[Authorize(Policy = "RequiresElevation")]</c> —
+/// JF's supplied admin policy (same one File Transformation uses). The earlier
+/// SendToKindle pattern (<c>[Authorize]</c> + manual <c>Jellyfin-IsAdministrator</c>
+/// claim check) targets JF 10.10.x; in 10.11.x JF emits the standard
+/// <c>ClaimTypes.Role = "Administrator"</c> claim instead, and the policy is
+/// the load-bearing gate.
 /// </summary>
 [ApiController]
 [Route("CypherflixHub")]
@@ -51,16 +52,11 @@ public class ProvidersController : ControllerBase
 
     /// <summary>Metadata for every registered provider type. Admin-only.</summary>
     [HttpGet("Providers/Types")]
-    [Authorize]
+    [Authorize(Policy = "RequiresElevation")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public ActionResult<IReadOnlyList<ProviderTypeDto>> GetTypes()
     {
-        if (!IsAdmin())
-        {
-            return Forbid();
-        }
-
         List<ProviderTypeDto> dtos = _registry.All
             .Select(p => new ProviderTypeDto
             {
@@ -88,16 +84,11 @@ public class ProvidersController : ControllerBase
     /// masked to <c>"***"</c>. Admin-only.
     /// </summary>
     [HttpGet("Providers")]
-    [Authorize]
+    [Authorize(Policy = "RequiresElevation")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public ActionResult<IReadOnlyList<ProviderInstance>> GetInstances()
     {
-        if (!IsAdmin())
-        {
-            return Forbid();
-        }
-
         ProviderInstance[] stored = Plugin.Instance!.Configuration.Providers ?? Array.Empty<ProviderInstance>();
         List<ProviderInstance> masked = stored.Select(MaskSecrets).ToList();
         return Ok(masked);
@@ -115,17 +106,12 @@ public class ProvidersController : ControllerBase
     /// Admin-only.
     /// </summary>
     [HttpPost("Providers")]
-    [Authorize]
+    [Authorize(Policy = "RequiresElevation")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public ActionResult<ProviderInstance> SaveInstance([FromBody] ProviderInstance body)
     {
-        if (!IsAdmin())
-        {
-            return Forbid();
-        }
-
         if (body is null)
         {
             return BadRequest(new { Error = "Body is required." });
@@ -207,17 +193,12 @@ public class ProvidersController : ControllerBase
 
     /// <summary>Remove the instance with that id and persist. Admin-only.</summary>
     [HttpDelete("Providers/{id}")]
-    [Authorize]
+    [Authorize(Policy = "RequiresElevation")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public IActionResult DeleteInstance([FromRoute] Guid id)
     {
-        if (!IsAdmin())
-        {
-            return Forbid();
-        }
-
         ProviderInstance[] existing = Plugin.Instance!.Configuration.Providers ?? Array.Empty<ProviderInstance>();
         ProviderInstance[] remaining = existing.Where(p => p.Id != id).ToArray();
         if (remaining.Length == existing.Length)
@@ -243,7 +224,7 @@ public class ProvidersController : ControllerBase
     /// Admin-only.
     /// </summary>
     [HttpPost("Providers/Test")]
-    [Authorize]
+    [Authorize(Policy = "RequiresElevation")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -251,11 +232,6 @@ public class ProvidersController : ControllerBase
         [FromBody] ProviderInstance body,
         CancellationToken ct)
     {
-        if (!IsAdmin())
-        {
-            return Forbid();
-        }
-
         if (body is null)
         {
             return BadRequest(new { Error = "Body is required." });
@@ -324,21 +300,19 @@ public class ProvidersController : ControllerBase
     }
 
     // ---------------------------------------------------------------------
-    // Auth helpers (verbatim from JELLYFIN-INTEGRATION.md §1.3)
+    // Auth helpers — JF 10.11.x emits the standard ClaimTypes.NameIdentifier
+    // (and InternalClaimTypes.UserId, which surfaces as "Jellyfin-UserId" in
+    // the legacy 10.10.x flow). Try both for compatibility.
     // ---------------------------------------------------------------------
 
     private Guid GetCurrentUserId()
     {
-        string? v = User.FindFirst("Jellyfin-UserId")?.Value
-                    ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return string.IsNullOrEmpty(v) ? Guid.Empty : Guid.Parse(v);
+        string? v = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                    ?? User.FindFirst("Jellyfin-UserId")?.Value;
+        return string.IsNullOrEmpty(v) || !Guid.TryParse(v, out Guid parsed)
+            ? Guid.Empty
+            : parsed;
     }
-
-    private bool IsAdmin() =>
-        string.Equals(
-            User.FindFirst("Jellyfin-IsAdministrator")?.Value,
-            "true",
-            StringComparison.OrdinalIgnoreCase);
 
     // ---------------------------------------------------------------------
     // Internal helpers
