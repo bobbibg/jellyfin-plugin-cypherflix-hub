@@ -1,0 +1,57 @@
+/*
+ * Cypherflix Hub — shared SPA stylesheet.
+ *
+ * Served at /CypherflixHub/Web/styles.css by Api/WebController.cs and loaded
+ * by bootstrap.js. Kept deliberately small — UI-003/004/005 add their own
+ * page-specific rules under their own scoped selectors.
+ *
+ * Native tab styling: we deliberately reuse Jellyfin's `.emby-tab-button`
+ * class on our buttons (see JELLYFIN-INTEGRATION.md §7.4), so we do NOT
+ * override their visual style here. The only tab-related rule is making
+ * sure our injected buttons sit in the same flex/inline flow as the
+ * native ones, which they already do because we mount inside
+ * `.emby-tabs-slider`.
+ */
+
+/* ---------------------------------------------------------------- */
+/* Cypherflix view container                                        */
+/* ---------------------------------------------------------------- */
+/*
+ * #cypherflixHubView is appended to `.mainAnimatedPages` by bootstrap.js
+ * and toggled with the `hide` class (matching Jellyfin's own visibility
+ * convention — see jellyfin-web src/components/viewContainer.js). It
+ * provides the same baseline a native page gets so per-page modules
+ * don't have to reinvent layout primitives.
+ */
+.cypherflix-view {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 1.5em;
+    color: var(--jf-palette-text-primary, #fff);
+    background: var(--jf-palette-background-default, #101010);
+}
+
+.cypherflix-view.hide {
+    display: none;
+}
+
+/* ---------------------------------------------------------------- */
+/* Reserved hooks for UI-003/004/005                                */
+/* ---------------------------------------------------------------- */
+/*
+ * Page modules can rely on these scoping classes existing — they're empty
+ * here on purpose so each page module owns its own visual rules without
+ * needing a stylesheet update from this file.
+ */
+.cypherflix-page {
+    /* page-level wrapper — reserved for UI-003/004/005 */
+}
+
+.cypherflix-page__header {
+    /* reserved */
+}
+
+.cypherflix-page__body {
+    /* reserved */
+}
