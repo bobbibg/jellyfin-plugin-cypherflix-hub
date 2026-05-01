@@ -1,15 +1,13 @@
 name: Build & Release
 
+# Triggers on every push to main (after the manifest commit-back step
+# we use "[skip ci]" in the commit message to avoid an infinite loop).
+# Also supports manual dispatch for ad-hoc rebuilds.
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    branches:
+      - main
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version (e.g. 0.1.0)'
-        required: true
-        default: '0.1.0'
 
 permissions:
   contents: write
@@ -17,108 +15,226 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Hard-stop on the manifest commit-back loop. The manifest commit ends
+    # with "[skip ci]" so the default GitHub skip applies, but this is a
+    # belt-and-braces guard in case someone tweaks the message.
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Set version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            VERSION="${GITHUB_REF#refs/tags/v}"
-          else
-            VERSION="${{ github.event.inputs.version }}"
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Version: $VERSION"
+          # We push the manifest update back to main, so we need a token
+          # that can do that. GITHUB_TOKEN with contents: write is fine.
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup .NET 8
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
 
+      - name: Read version from csproj
+        id: version
+        run: |
+          set -euo pipefail
+          CSPROJ="Jellyfin.Plugin.CypherflixHub/Jellyfin.Plugin.CypherflixHub.csproj"
+          VERSION=$(grep -oPm1 "(?<=<Version>)[^<]+" "$CSPROJ")
+          if [ -z "$VERSION" ]; then
+            echo "ERROR: Could not extract <Version> from $CSPROJ"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
+
+      - name: Check if release already exists
+        id: release_check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if gh release view "v${VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release v${VERSION} already exists — skipping build."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Release v${VERSION} does not exist — proceeding with build."
+          fi
+
       - name: Restore
+        if: steps.release_check.outputs.exists == 'false'
         run: dotnet restore Jellyfin.Plugin.CypherflixHub/Jellyfin.Plugin.CypherflixHub.csproj
 
-      - name: Build
+      - name: Publish
+        if: steps.release_check.outputs.exists == 'false'
         run: |
-          dotnet build Jellyfin.Plugin.CypherflixHub/Jellyfin.Plugin.CypherflixHub.csproj \
+          dotnet publish Jellyfin.Plugin.CypherflixHub/Jellyfin.Plugin.CypherflixHub.csproj \
             --configuration Release \
             --no-restore \
+            -o out \
             -p:Version=${{ steps.version.outputs.version }} \
             -p:AssemblyVersion=${{ steps.version.outputs.version }}.0 \
             -p:FileVersion=${{ steps.version.outputs.version }}.0
 
-      - name: Package plugin zip
+      - name: Verify and stage required DLLs
+        if: steps.release_check.outputs.exists == 'false'
         run: |
           set -euo pipefail
-          OUT=Jellyfin.Plugin.CypherflixHub/bin/Release/net8.0
+          OUT=out
+          BIN=Jellyfin.Plugin.CypherflixHub/bin/Release/net8.0
+          STAGE=stage
+          mkdir -p "$STAGE"
+
+          echo "===== Files in publish output ($OUT) ====="
+          ls -la "$OUT" || true
+          echo "===== Files in build output ($BIN) ====="
+          ls -la "$BIN" || true
+
+          # The plugin DLL is mandatory.
+          if [ ! -f "$OUT/Jellyfin.Plugin.CypherflixHub.dll" ]; then
+            echo "ERROR: Jellyfin.Plugin.CypherflixHub.dll missing from publish output"
+            exit 1
+          fi
+          cp "$OUT/Jellyfin.Plugin.CypherflixHub.dll" "$STAGE/"
+
+          # Helper: stage a DLL. Try publish output first; fall back to bin/.
+          # Fails if the file is in NEITHER location.
+          stage_required () {
+            local pattern="$1"
+            local label="$2"
+            local found=0
+            for src in "$OUT" "$BIN"; do
+              for f in "$src"/$pattern; do
+                if [ -f "$f" ]; then
+                  cp -n "$f" "$STAGE/"
+                  found=1
+                fi
+              done
+            done
+            if [ "$found" -eq 0 ]; then
+              echo "ERROR: required dependency $label ($pattern) not found in $OUT or $BIN"
+              exit 1
+            fi
+          }
+
+          # Helper: stage if present (no error if missing — for deps the host
+          # provides at runtime that we still want to ship if produced).
+          stage_optional () {
+            local pattern="$1"
+            for src in "$OUT" "$BIN"; do
+              for f in "$src"/$pattern; do
+                if [ -f "$f" ]; then
+                  cp -n "$f" "$STAGE/" || true
+                fi
+              done
+            done
+          }
+
+          # Required: Meilisearch client + its transitive deps. Jellyfin host
+          # does not ship these — plugins load in their own AssemblyLoadContext.
+          stage_required "Meilisearch.dll" "Meilisearch"
+          # Common Meilisearch transitive deps (CSharpFunctionalExtensions etc.).
+          # We pattern-match liberally so future minor-bumps of Meilisearch don't
+          # break us — anything matching these names gets bundled.
+          stage_optional "CSharpFunctionalExtensions*.dll"
+          stage_optional "System.IdentityModel.Tokens.Jwt*.dll"
+          stage_optional "Microsoft.IdentityModel.*.dll"
+
+          # Newtonsoft.Json: required for the File Transformation plugin
+          # interop (JObject payload). Jellyfin host ships it, but bundling
+          # our own copy guarantees the right version is loaded into our
+          # AssemblyLoadContext. Optional in the publish-output sense — if
+          # publish strips it, we still ship.
+          stage_optional "Newtonsoft.Json.dll"
+
+          echo "===== Staged files for zip ====="
+          ls -la "$STAGE"
+
+      - name: Package plugin zip
+        if: steps.release_check.outputs.exists == 'false'
+        run: |
+          set -euo pipefail
           mkdir -p dist
-          ls -la "$OUT"
-          REQUIRED=("Jellyfin.Plugin.CypherflixHub.dll")
-          for f in "${REQUIRED[@]}"; do
-            [ -f "$OUT/$f" ] || { echo "ERROR: missing $f"; exit 1; }
-          done
-          cd "$OUT"
-          # Bundle plugin DLL plus any non-Jellyfin runtime deps (Meilisearch client + transitive)
-          zip -j "$GITHUB_WORKSPACE/dist/cypherflix-hub_${{ steps.version.outputs.version }}.zip" \
-            Jellyfin.Plugin.CypherflixHub.dll \
-            $(ls Meilisearch*.dll 2>/dev/null || true) \
-            $(ls System.Text.Json*.dll 2>/dev/null || true)
+          ZIP="dist/cypherflix-hub_${{ steps.version.outputs.version }}.zip"
+          cd stage
+          zip -j "$GITHUB_WORKSPACE/$ZIP" *.dll
           cd "$GITHUB_WORKSPACE"
-          unzip -l "dist/cypherflix-hub_${{ steps.version.outputs.version }}.zip"
+
+          echo "===== Final zip ====="
+          ls -la dist/
+          unzip -l "$ZIP"
 
       - name: Compute checksum
+        if: steps.release_check.outputs.exists == 'false'
         id: checksum
         run: |
+          set -euo pipefail
           ZIP="dist/cypherflix-hub_${{ steps.version.outputs.version }}.zip"
           MD5=$(md5sum "$ZIP" | awk '{print $1}')
           echo "md5=$MD5" >> "$GITHUB_OUTPUT"
+          echo "MD5: $MD5"
 
       - name: Update manifest.json on main
+        if: steps.release_check.outputs.exists == 'false'
         env:
           VERSION: ${{ steps.version.outputs.version }}
           MD5: ${{ steps.checksum.outputs.md5 }}
         run: |
-          git checkout main
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           python3 - <<'PY'
           import json, os, datetime
-          version = os.environ["VERSION"]
-          md5 = os.environ["MD5"]
-          repo = os.environ["GITHUB_REPOSITORY"]
-          download_url = f"https://github.com/{repo}/releases/download/v{version}/cypherflix-hub_{version}.zip"
+          version   = os.environ["VERSION"]
+          md5       = os.environ["MD5"]
+          repo      = os.environ["GITHUB_REPOSITORY"]
+          download  = f"https://github.com/{repo}/releases/download/v{version}/cypherflix-hub_{version}.zip"
           timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
           with open("manifest.json", "r") as f:
               data = json.load(f)
+
+          # Locate the Cypherflix Hub plugin entry by its known GUID.
+          target_guid = "c1f1e571-7ba8-4d6a-9e2b-3a4f0c5d7e8b"
+          plugin = next((p for p in data if p.get("guid") == target_guid), None)
+          if plugin is None:
+              raise SystemExit(f"ERROR: plugin with guid {target_guid} not found in manifest.json")
+
           entry = {
-              "version": f"{version}.0",
-              "changelog": f"Release {version}",
-              "targetAbi": "10.10.0.0",
-              "sourceUrl": download_url,
-              "checksum": md5,
-              "timestamp": timestamp
+              "version":    f"{version}.0",
+              "changelog":  "Automated release",
+              "targetAbi":  "10.10.7.0",
+              "sourceUrl":  download,
+              "checksum":   md5,
+              "timestamp":  timestamp,
           }
-          versions = data[0].setdefault("versions", [])
+
+          versions = plugin.setdefault("versions", [])
+          # Replace any existing entry for the same version; otherwise append.
           versions = [v for v in versions if v.get("version") != entry["version"]]
           versions.insert(0, entry)
-          data[0]["versions"] = versions
+          plugin["versions"] = versions
+
           with open("manifest.json", "w") as f:
               json.dump(data, f, indent=2)
               f.write("\n")
           PY
 
           git add manifest.json
-          git commit -m "Update manifest for v${VERSION}" || echo "nothing to commit"
-          git push origin main
+          # "[skip ci]" stops this commit from re-triggering this workflow.
+          if git commit -m "chore: update manifest for v${VERSION} [skip ci]"; then
+            git push origin HEAD:main
+          else
+            echo "Nothing to commit — manifest already up to date."
+          fi
 
       - name: Create GitHub Release
+        if: steps.release_check.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
         with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
           files: dist/cypherflix-hub_${{ steps.version.outputs.version }}.zip
           generate_release_notes: true
+          target_commitish: main
