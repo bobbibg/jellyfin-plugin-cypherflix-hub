@@ -62,4 +62,4 @@ update + create the release.
 
 ---
 
-Status: stub exists — needs to be filled in following SendToKindle template
+Status: needs-review
