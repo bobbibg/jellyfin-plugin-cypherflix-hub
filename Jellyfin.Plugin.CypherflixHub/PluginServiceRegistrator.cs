@@ -42,8 +42,8 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
 
         // ---- Aggregators ----
         // serviceCollection.AddSingleton<Services.Aggregators.SearchAggregator>();
-        // serviceCollection.AddSingleton<Services.Aggregators.RequestAggregator>();
-        // serviceCollection.AddSingleton<Services.Aggregators.CalendarAggregator>();
+        serviceCollection.AddSingleton<Services.Aggregators.RequestAggregator>();
+        serviceCollection.AddSingleton<Services.Aggregators.CalendarAggregator>();
 
         // ---- Script injection (web UI) ----
         // SVC-005: register our index.html transformation with the File
