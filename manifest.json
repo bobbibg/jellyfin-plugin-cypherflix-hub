@@ -13,15 +13,6 @@
         "guid": "5e87cc92-571a-4d8d-8d98-d2d4147f9f90"
       }
     ],
-    "versions": [
-      {
-        "version": "0.1.0.0",
-        "changelog": "Automated release",
-        "targetAbi": "10.10.7.0",
-        "sourceUrl": "https://github.com/bobbibg/jellyfin-plugin-cypherflix-hub/releases/download/v0.1.0/cypherflix-hub_0.1.0.zip",
-        "checksum": "d8d30f698591be8a3c105f6d388ab65b",
-        "timestamp": "2026-05-01T11:23:35Z"
-      }
-    ]
+    "versions": []
   }
 ]
