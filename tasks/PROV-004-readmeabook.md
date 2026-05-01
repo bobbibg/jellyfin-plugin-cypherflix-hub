@@ -59,4 +59,4 @@ for every operation (so the rest of the build doesn't block on this).
 
 ---
 
-Status: not-started — BLOCKED on ReadMeABook deployment + API docs
+Status: stub-only — needs ReadMeABook deployment before completion
