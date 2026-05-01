@@ -7,7 +7,12 @@
     "overview": "Adds Discover / Requests / Calendar tabs to Jellyfin. Provider framework lets you plug in Jellyseerr, Readarr instances, ReadMeABook, and future services via the admin UI without code changes.",
     "owner": "bobbibg",
     "imageUrl": "",
-    "_dependencies_TODO": "OPS-001 must add a dependencies array referencing the File Transformation plugin GUID \u2014 open question #1 in JELLYFIN-INTEGRATION.md.",
+    "dependencies": [
+      {
+        "name": "File Transformation",
+        "guid": "5e87cc92-571a-4d8d-8d98-d2d4147f9f90"
+      }
+    ],
     "versions": [
       {
         "version": "0.1.0.0",

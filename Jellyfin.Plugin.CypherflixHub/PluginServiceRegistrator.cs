@@ -33,6 +33,8 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         // serviceCollection.AddSingleton<Services.Aggregators.CalendarAggregator>();
 
         // ---- Script injection (web UI) ----
-        // serviceCollection.AddHostedService<Services.ScriptInjector>();
+        // SVC-005: register our index.html transformation with the File
+        // Transformation plugin. See JELLYFIN-INTEGRATION.md §2.
+        serviceCollection.AddHostedService<Services.FileTransformationRegistrar>();
     }
 }
