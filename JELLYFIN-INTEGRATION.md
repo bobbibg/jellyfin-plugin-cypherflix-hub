@@ -513,7 +513,87 @@ appear.
 
 ---
 
-## 8. Open questions tracked here (so they're answered before related code lands)
+## 8. Readarr API (Servarr family — used by PROV-003)
+
+We integrate the Faustvii fork of Readarr (`v0.x`). API surface and shapes are
+the standard Servarr v1 contract; the Faustvii fork tracks upstream Readarr
+0.x with no breaking divergences in the endpoints we use.
+
+### 8.1 Authentication
+
+All requests send `X-Api-Key: <key>` in the header. The same scheme as
+Jellyseerr / Sonarr / Radarr.
+
+Source: https://readarr.com/docs/api/ (Servarr "Authentication" section).
+
+### 8.2 Endpoints used by PROV-003
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET`  | `/api/v1/system/status` | Connection test + version probe (Faustvii ships `0.x`). |
+| `GET`  | `/api/v1/book` | List books in library; `?monitored=true` for index pass; `?titleSlug={slug}` to look up one book. |
+| `GET`  | `/api/v1/book/lookup?term={q}` | Search remote (Goodreads / OL) for not-yet-added books. |
+| `PUT`  | `/api/v1/book/{id}` | Update a book (used to flip `monitored=true` on an existing record). |
+| `POST` | `/api/v1/book` | Add a book (after the author exists). |
+| `GET`  | `/api/v1/author/lookup?term={q}` | Search remote for an author. |
+| `POST` | `/api/v1/author` | Add an author with the configured root folder + profiles. |
+| `GET`  | `/api/v1/tag` | List tags. |
+| `POST` | `/api/v1/tag` | Create a tag (idempotent: 409 / "already exists" → look up). |
+| `GET`  | `/api/v1/queue` | Active downloads (used to decorate request statuses with progress). |
+| `GET`  | `/api/v1/calendar?start={ISO}&end={ISO}` | Upcoming releases in the date window. |
+| `POST` | `/api/v1/command` | Trigger commands. We use `{ name: "BookSearch", bookIds: [id] }`. |
+
+Sources:
+
+- Top-level docs index — https://readarr.com/docs/api/
+- Book endpoints — https://readarr.com/docs/api/#/Book (mirrors Sonarr's `/series` shape).
+- Lookup endpoints — https://readarr.com/docs/api/#/BookLookup, https://readarr.com/docs/api/#/AuthorLookup
+- Calendar — https://readarr.com/docs/api/#/Calendar (returns book release records).
+- Command — https://readarr.com/docs/api/#/Command (Servarr-standard `BookSearch`/`AuthorSearch` commands).
+- Queue — https://readarr.com/docs/api/#/Queue
+- Faustvii fork (no API divergence vs upstream Readarr 0.x):
+  https://github.com/Faustvii/Readarr
+
+### 8.3 Field shapes we consume
+
+Modelled in `Providers/Readarr/Dtos.cs` as `System.Text.Json` records. Only
+the fields we actually read are declared; unknown fields are ignored by the
+serialiser by default. Notable fields:
+
+- `Book.id` (int), `title`, `titleSlug`, `monitored`, `added`,
+  `releaseDate`, `authorId`, `seriesTitle`, `images[].coverType+url`,
+  `editions[].title+overview`, `statistics.bookFileCount`, `statistics.sizeOnDisk`.
+- `Author.id`, `authorName`, `foreignAuthorId` (Goodreads/OL key),
+  `qualityProfileId`, `metadataProfileId`, `rootFolderPath`, `tags[]` (int ids),
+  `monitored`.
+- `Calendar` items reuse the `Book` shape with `releaseDate` populated.
+- `Queue` items: `bookId`, `status`, `size`, `sizeleft`,
+  `trackedDownloadStatus`, `timeleft`.
+- `Tag.id`, `tag.label`.
+- `SystemStatus.version` (string starting with `0.` for Faustvii fork).
+
+Source: the linked Servarr OpenAPI specs above.
+
+### 8.4 Idempotency conventions
+
+- `POST /api/v1/author` returns **400** (not 409) with body
+  `{ propertyName: "ForeignAuthorId", errorMessage: "...already been added..." }`
+  when the author exists. We must `GET /api/v1/author?term=...` (or filter the
+  full list) to recover the id.
+- `POST /api/v1/book` behaves the same.
+- `POST /api/v1/tag` returns **400** when the label already exists; recover via
+  `GET /api/v1/tag` and match on `label`.
+
+These shapes are the Servarr-standard validation error format
+(`List<ValidationFailure>`) — same as Sonarr/Radarr.
+
+Source: Servarr API behaviour documented in the upstream Sonarr/Radarr docs
+(same code path) and confirmed by the Faustvii Readarr response bodies during
+manual testing.
+
+---
+
+## 9. Open questions tracked here (so they're answered before related code lands)
 
 | # | Question | Owner | Status |
 |---|---|---|---|
