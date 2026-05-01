@@ -209,6 +209,27 @@
         // -------------------------------------------------------------
         // Page bootstrap
         // -------------------------------------------------------------
+        // JF plugin config pages are fragment-loaded: the page HTML is inserted
+        // into the DOM, then this inline <script> executes. By that time, any
+        // `pageshow` event for this page has already fired — registering the
+        // listener after the fact misses it. So we run a direct bootstrap
+        // immediately AND keep the pageshow listener as a backup for cases
+        // where this page is re-shown after navigation (idempotent via the
+        // data-cypherflix-wired marker).
+
+        function tryInitImmediate() {
+            var page = document.querySelector("#cypherflixHubConfigPage");
+            if (page && (!page.dataset || page.dataset.cypherflixWired !== "true")) {
+                initPage(page);
+            }
+        }
+
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", tryInitImmediate);
+        } else {
+            tryInitImmediate();
+        }
+
         document.addEventListener("pageshow", function (e) {
             var page = e.target;
             if (!page || !page.classList || !page.classList.contains("pluginConfigurationPage")) {
@@ -218,10 +239,23 @@
                 // Not our config page — another plugin's pageshow.
                 return;
             }
+            if (page.dataset && page.dataset.cypherflixWired === "true") {
+                // Already wired up by tryInitImmediate or a previous pageshow.
+                return;
+            }
             initPage(page);
         });
 
         function initPage(page) {
+            // Idempotency guard — wiring the same handlers twice would double-fire
+            // submits and double the API calls.
+            if (page.dataset && page.dataset.cypherflixWired === "true") {
+                return;
+            }
+            if (page.dataset) {
+                page.dataset.cypherflixWired = "true";
+            }
+
             // Wire form handlers once the elements exist on this page.
             var meiliForm = page.querySelector(".cypherflixMeilisearchForm");
             if (meiliForm) {
