@@ -32,4 +32,4 @@ Defaults: `start = today`, `end = today + 30 days` if not given.
 
 ---
 
-Status: not-started — needs SVC-004
+Status: needs-review
