@@ -124,4 +124,26 @@ Add to `manifest.json`:
 
 ---
 
-Status: not-started
+Status: needs-review
+
+## Implementation notes (delta from spec)
+
+- **Callback signature corrected:** the spec example showed `(JObject) -> void`
+  with mutation. Verification of the upstream
+  `Jellyfin.Plugin.FileTransformation.Helpers.TransformationHelper.ApplyTransformation`
+  (https://raw.githubusercontent.com/IAmParadox27/jellyfin-plugin-file-transformation/main/src/Jellyfin.Plugin.FileTransformation/Helpers/TransformationHelper.cs)
+  shows it actually invokes the callback as
+  `(string)method.Invoke(null, new object?[] { paramObj })`, so the required
+  signature is **`(JObject) -> string`**. `IndexHtmlTransform.Transform`
+  returns the (possibly modified) contents instead of mutating. JELLYFIN-INTEGRATION.md §2.3
+  was updated with the verified signature and the source URL.
+- **Open question #1 closed.** File Transformation plugin GUID =
+  `5e87cc92-571a-4d8d-8d98-d2d4147f9f90`. Recorded in `manifest.json`,
+  JELLYFIN-INTEGRATION.md §2.5, and §8 (table marked closed).
+- **Newtonsoft.Json added as a compile-only dependency** (`PrivateAssets=all`,
+  `ExcludeAssets=runtime`) so we can construct/consume `JObject` against the
+  same type the host's File Transformation plugin loads. The DLL is NOT
+  shipped — verified absent from `bin/Debug/net8.0/`.
+- **Graceful degradation:** if File Transformation isn't installed, the
+  registrar logs a warning after 60s and the plugin keeps running (no UI
+  tabs). Any reflection failure is caught and logged — never propagated.

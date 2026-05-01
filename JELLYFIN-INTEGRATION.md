@@ -201,6 +201,30 @@ We use the **callback** form (assembly + class + method) — File Transformation
 invokes our static method with `JObject { "contents": "<file>" }` and we
 return the modified contents.
 
+**Verified callback signature: `(JObject) -> string` (returning the new
+contents — NOT void/mutating).** The README is ambiguous on this; the
+authoritative source is the upstream invocation site:
+
+Source: https://raw.githubusercontent.com/IAmParadox27/jellyfin-plugin-file-transformation/main/src/Jellyfin.Plugin.FileTransformation/Helpers/TransformationHelper.cs
+
+```csharp
+ParameterInfo payloadParameter = method.GetParameters()[0];
+object? paramObj = obj.ToObject(payloadParameter.ParameterType);
+
+transformedString = (string)method.Invoke(null, new object?[] { paramObj })!;
+```
+
+The cast `(string)method.Invoke(...)` is the proof: a void return would
+fail this cast at runtime. The first parameter type is read off the method
+signature reflectively and the JObject is converted to it via
+`obj.ToObject(parameterType)`, so declaring the parameter as
+`Newtonsoft.Json.Linq.JObject` is the safest choice (round-trips identity).
+
+`JObject` here is `Newtonsoft.Json.Linq.JObject` (Newtonsoft, not
+`System.Text.Json`). Our project references Newtonsoft.Json with
+`PrivateAssets="all"` and `ExcludeAssets="runtime"` so the host's copy
+(loaded by File Transformation) is the only runtime instance.
+
 ### 2.4 Where to register
 
 In `PluginServiceRegistrator.RegisterServices` — wire a `BackgroundService`
@@ -218,13 +242,18 @@ Add File Transformation as a `dependency` in `manifest.json`:
   "dependencies": [
     {
       "name": "File Transformation",
-      "guid": "<File Transformation plugin GUID>"
+      "guid": "5e87cc92-571a-4d8d-8d98-d2d4147f9f90"
     }
   ]
 }
 ```
 
-(Confirm the GUID from the File Transformation manifest before shipping.)
+GUID confirmed from two independent sources (open question #1, closed by SVC-005):
+
+- The plugin's own `Plugin.Id` override in
+  https://raw.githubusercontent.com/IAmParadox27/jellyfin-plugin-file-transformation/main/src/Jellyfin.Plugin.FileTransformation/FileTransformationPlugin.cs
+- The author's published manifest at
+  https://www.iamparadox.dev/jellyfin/plugins/manifest.json
 
 ---
 
@@ -488,7 +517,7 @@ appear.
 
 | # | Question | Owner | Status |
 |---|---|---|---|
-| 1 | What is the File Transformation plugin's official GUID? (For manifest dependency declaration.) | first agent on SVC-005 | open — fetch from https://www.iamparadox.dev/jellyfin/plugins/manifest.json |
+| 1 | What is the File Transformation plugin's official GUID? (For manifest dependency declaration.) | SVC-005 | **closed** — `5e87cc92-571a-4d8d-8d98-d2d4147f9f90`. Confirmed by `FileTransformationPlugin.Id` in the upstream source AND the published manifest at https://www.iamparadox.dev/jellyfin/plugins/manifest.json. Recorded in `manifest.json` and §2.5. |
 | 2 | What's the exact CSS selector for the Jellyfin title-bar tabs in 10.10.7? | first agent on UI-001 | open — inspect a live JF instance |
 | 3 | Does `MenuSection = "user"` actually work on JF 10.10/10.11, or do we need a different mechanism for per-user pages? | UI-002 agent | open — verify by deploying SendToKindle's `userConfigPage.html` (it already uses `"user"`) |
 
