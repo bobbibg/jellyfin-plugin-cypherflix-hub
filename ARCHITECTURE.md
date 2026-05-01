@@ -73,7 +73,6 @@ jellyfin-plugin-cypherflix-hub/
     │   ├── Jellyfin/                    (PROV-001)
     │   ├── Jellyseerr/                  (PROV-002)
     │   ├── Readarr/                     (PROV-003)
-    │   ├── ReadMeABook/                 (PROV-004)
     │   └── ...
     ├── Services/
     │   ├── MeilisearchClient.cs         (SVC-001)

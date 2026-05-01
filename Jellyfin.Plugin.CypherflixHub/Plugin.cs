@@ -28,7 +28,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
 
     public override string Description =>
         "Unified search, discover, requests, and calendar across Jellyseerr, " +
-        "Readarr, ReadMeABook, and any future provider. Replaces the JF Enhanced " +
+        "Readarr, and any future provider. Replaces the JF Enhanced " +
         "Requests/Calendar tabs with multi-provider versions.";
 
     public IEnumerable<PluginPageInfo> GetPages()
