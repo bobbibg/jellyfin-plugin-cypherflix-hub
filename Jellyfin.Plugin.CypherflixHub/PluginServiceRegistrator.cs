@@ -17,7 +17,8 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<Core.ProviderRegistry>();
 
         // ---- Provider type registrations go here ----
-        // serviceCollection.AddSingleton<Core.IMediaProvider, Providers.JellyfinProvider>();
+        serviceCollection.AddSingleton<Providers.Jellyfin.JellyfinClient>();
+        serviceCollection.AddSingleton<Core.IMediaProvider, Providers.Jellyfin.JellyfinProvider>();
         // serviceCollection.AddSingleton<Core.IMediaProvider, Providers.JellyseerrProvider>();
         // serviceCollection.AddSingleton<Core.IMediaProvider, Providers.ReadarrProvider>();
         // serviceCollection.AddSingleton<Core.IMediaProvider, Providers.ReadMeABookProvider>();

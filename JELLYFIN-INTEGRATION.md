@@ -26,6 +26,68 @@ it. No invented names.
 | `IServerApplicationHost` | `MediaBrowser.Controller` | `Jellyfin.Controller` | (same) |
 | `ILibraryManager` | `MediaBrowser.Controller.Library` | `Jellyfin.Controller` | (same) |
 | `IUserManager` | `MediaBrowser.Controller.Library` | `Jellyfin.Controller` | (same) |
+| `BaseItem` | `MediaBrowser.Controller.Entities` | `Jellyfin.Controller` | https://raw.githubusercontent.com/jellyfin/jellyfin/master/MediaBrowser.Controller/Entities/BaseItem.cs |
+| `InternalItemsQuery` | `MediaBrowser.Controller.Entities` | `Jellyfin.Controller` | https://raw.githubusercontent.com/jellyfin/jellyfin/master/MediaBrowser.Controller/Entities/InternalItemsQuery.cs |
+| `BaseItemKind` (enum) | `Jellyfin.Data.Enums` | `Jellyfin.Data` (transitive via `Jellyfin.Model`) | https://raw.githubusercontent.com/jellyfin/jellyfin/master/src/Jellyfin.Data/Enums/BaseItemKind.cs |
+| `QueryResult<T>` | `MediaBrowser.Model.Querying` | `Jellyfin.Model` | https://raw.githubusercontent.com/jellyfin/jellyfin/master/MediaBrowser.Model/Querying/QueryResult.cs |
+
+### 1.1.1 `ILibraryManager` methods used by PROV-001
+
+Verified against `Jellyfin.Controller` 10.10.7 by reflecting the shipped DLL
+(`C:\Users\<u>\.nuget\packages\jellyfin.controller\10.10.7\lib\net8.0\MediaBrowser.Controller.dll`):
+
+```csharp
+QueryResult<BaseItem> GetItemsResult(InternalItemsQuery query);
+List<BaseItem>        GetItemList(InternalItemsQuery query);
+List<BaseItem>        GetItemList(InternalItemsQuery query, bool allowExternalContent);
+List<BaseItem>        GetItemList(InternalItemsQuery query, List<BaseItem> parents);
+QueryResult<BaseItem> QueryItems(InternalItemsQuery query);
+```
+
+Relevant `InternalItemsQuery` properties (subset, verified by reflection):
+
+| Property | Type |
+|---|---|
+| `SearchTerm` | `string` |
+| `IncludeItemTypes` | `BaseItemKind[]` |
+| `Limit` | `int?` |
+| `StartIndex` | `int?` |
+| `Recursive` | `bool` |
+| `EnableTotalRecordCount` | `bool` |
+
+Relevant `BaseItem` members used:
+
+| Member | Type / signature |
+|---|---|
+| `Id` | `Guid` |
+| `Name` | `string` |
+| `ProductionYear` | `int?` |
+| `Overview` | `string` |
+| `PremiereDate` | `DateTime?` |
+| `Tags` | `string[]` |
+| `DateCreated` | `DateTime` |
+| `Album` | `string` |
+| `GetBaseItemKind()` | `BaseItemKind` |
+
+### 1.1.2 `BaseItemKind` values used by PROV-001
+
+Full enum verified by loading `Jellyfin.Data.dll` 10.10.7 — the values relevant
+to this plugin (subset of 37 total members):
+
+| `BaseItemKind` | Plugin's `MediaType` mapping |
+|---|---|
+| `Movie` | `Movie` |
+| `Series` | `TvShow` |
+| `Season` | `TvShow` |
+| `Episode` | `TvShow` |
+| `Book` | `Book` (covers comics until Jellyfin gains a `Comic` kind) |
+| `MusicAlbum` | `Music` |
+| `Audio` | `Music` |
+| `AudioBook` | `Audiobook` |
+
+Note: there is **no** `Comic` value in `BaseItemKind` 10.10.7. The Bookshelf
+plugin exposes `.cbz` files as `Book` items; we treat all `Book` items as
+`MediaType.Book` and revisit when/if Jellyfin adds a dedicated comic kind.
 
 ### 1.2 `PluginPageInfo` shape (verbatim)
 
