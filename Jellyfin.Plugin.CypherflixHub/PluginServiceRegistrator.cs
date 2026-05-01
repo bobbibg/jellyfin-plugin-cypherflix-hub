@@ -37,7 +37,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
 
         // ---- Cross-cutting services ----
         serviceCollection.AddSingleton<Services.MeilisearchClient>();
-        // serviceCollection.AddHostedService<Services.IndexerService>();
+        serviceCollection.AddHostedService<Services.IndexerService>();
 
         // ---- Aggregators ----
         // serviceCollection.AddSingleton<Services.Aggregators.SearchAggregator>();
