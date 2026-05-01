@@ -32,7 +32,8 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<Core.IMediaProvider, Providers.Jellyfin.JellyfinProvider>();
         serviceCollection.AddSingleton<Providers.Jellyseerr.JellyseerrClient>();
         serviceCollection.AddSingleton<Core.IMediaProvider, Providers.Jellyseerr.JellyseerrProvider>();
-        // serviceCollection.AddSingleton<Core.IMediaProvider, Providers.ReadarrProvider>();
+        serviceCollection.AddSingleton<Providers.Readarr.ReadarrClient>();
+        serviceCollection.AddSingleton<Core.IMediaProvider, Providers.Readarr.ReadarrProvider>();
         serviceCollection.AddSingleton<Core.IMediaProvider, Providers.ReadMeABook.ReadMeABookProvider>();
 
         // ---- Cross-cutting services ----
