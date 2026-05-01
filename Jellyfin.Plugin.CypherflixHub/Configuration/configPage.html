@@ -8,40 +8,955 @@
 <div id="cypherflixHubConfigPage"
      data-role="page"
      class="page type-interior pluginConfigurationPage"
-     data-require="emby-input,emby-button,emby-select,emby-checkbox">
+     data-require="emby-input,emby-button,emby-select,emby-checkbox,emby-textarea">
 
     <div data-role="content">
         <div class="content-primary">
 
+            <!-- =============================================================
+                 Intro
+                 ============================================================= -->
             <div class="verticalSection verticalSection-extrabottompadding">
                 <h2 class="sectionTitle">Cypherflix Hub</h2>
                 <p>
                     Configure providers (Jellyseerr, Readarr, ReadMeABook, &hellip;) and the
                     Meilisearch instance used for unified search. Each provider type can have
-                    multiple instances — e.g. one Readarr for books and one for comics.
-                </p>
-                <p>
-                    Until the provider UI lands (Task <code>UI-002</code>), this page is a
-                    placeholder. Edit settings via <code>plugins/CypherflixHub.xml</code> in
-                    the Jellyfin config dir or wait for the next release.
+                    multiple instances &mdash; e.g. one Readarr for books and one for comics.
                 </p>
             </div>
 
-            <!-- Provider list will be rendered here by configPage.js (Task UI-002). -->
-            <div id="cypherflixHubProvidersContainer"></div>
+            <!-- =============================================================
+                 Section 1: Meilisearch
+                 ============================================================= -->
+            <div class="verticalSection verticalSection-extrabottompadding">
+                <h2 class="sectionTitle">Meilisearch</h2>
 
-            <!-- Meilisearch settings will be rendered here (Task UI-002). -->
-            <div id="cypherflixHubMeilisearchContainer"></div>
+                <form class="cypherflixMeilisearchForm">
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="cypherflixMeilisearchUrl">URL</label>
+                        <input is="emby-input"
+                               type="text"
+                               id="cypherflixMeilisearchUrl"
+                               placeholder="http://meilisearch:7700" />
+                        <div class="fieldDescription">
+                            Where Meilisearch is reachable from the Jellyfin server (Docker hostname or LAN URL).
+                        </div>
+                    </div>
+
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="cypherflixMeilisearchApiKey">API key</label>
+                        <input is="emby-input"
+                               type="password"
+                               id="cypherflixMeilisearchApiKey" />
+                        <div class="fieldDescription">
+                            Master/admin key, or a scoped key with index-write permission. Stored in plugin config.
+                        </div>
+                    </div>
+
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="cypherflixIndexIntervalMinutes">Index interval (minutes)</label>
+                        <input is="emby-input"
+                               type="number"
+                               min="1"
+                               id="cypherflixIndexIntervalMinutes" />
+                        <div class="fieldDescription">
+                            How often the indexer wakes up to refresh each provider's catalogue.
+                        </div>
+                    </div>
+
+                    <div>
+                        <button is="emby-button" type="submit" class="raised button-submit">
+                            <span>Save Meilisearch settings</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- =============================================================
+                 Section 2: Providers
+                 ============================================================= -->
+            <div class="verticalSection verticalSection-extrabottompadding">
+                <h2 class="sectionTitle">Providers</h2>
+                <p>
+                    Each provider instance (a configured Jellyseerr, Readarr, &hellip;) contributes to unified
+                    search, requests, and the calendar. Add as many as you need &mdash; the same type can have
+                    multiple instances with different scopes (e.g. books vs. comics).
+                </p>
+
+                <div style="margin-bottom: 1em;">
+                    <button is="emby-button"
+                            type="button"
+                            class="raised"
+                            id="cypherflixAddProviderBtn">
+                        <span>Add provider</span>
+                    </button>
+                </div>
+
+                <div id="cypherflixProvidersList">
+                    <div class="fieldDescription" id="cypherflixProvidersEmpty">
+                        No providers configured yet. Click &ldquo;Add provider&rdquo; to add one.
+                    </div>
+                </div>
+            </div>
+
+            <!-- =============================================================
+                 Modal: Add / Edit provider
+                 (vanilla div modal — Jellyfin does not expose a stable modal
+                 helper from configPage context. Pattern: SendToKindle plugin
+                 v1.1.x configPage.html.)
+                 ============================================================= -->
+            <div id="cypherflixProviderModal"
+                 style="display: none;
+                        position: fixed;
+                        inset: 0;
+                        z-index: 1000;
+                        background: rgba(0, 0, 0, 0.6);
+                        align-items: flex-start;
+                        justify-content: center;
+                        overflow-y: auto;
+                        padding: 2em 1em;">
+                <div style="background: var(--jf-palette-background-paper, #202020);
+                            color: var(--jf-palette-text-primary, #fff);
+                            border: 1px solid var(--jf-palette-divider, rgba(255,255,255,.12));
+                            border-radius: 6px;
+                            max-width: 720px;
+                            width: 100%;
+                            padding: 1.5em;">
+                    <h2 class="sectionTitle" id="cypherflixModalTitle">Add provider</h2>
+
+                    <!-- Step 1: pick a type -->
+                    <div id="cypherflixModalStepType">
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="cypherflixProviderTypeSelect">Provider type</label>
+                            <select is="emby-select" id="cypherflixProviderTypeSelect"></select>
+                            <div class="fieldDescription" id="cypherflixProviderTypeDescription"></div>
+                        </div>
+                        <div>
+                            <button is="emby-button" type="button" class="raised button-submit" id="cypherflixProviderTypeNext">
+                                <span>Next</span>
+                            </button>
+                            <button is="emby-button" type="button" class="raised" id="cypherflixProviderTypeCancel">
+                                <span>Cancel</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: fill the form -->
+                    <div id="cypherflixModalStepForm" style="display: none;">
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="cypherflixProviderName">Name</label>
+                            <input is="emby-input" type="text" id="cypherflixProviderName" />
+                            <div class="fieldDescription">
+                                Friendly name shown in the admin UI (e.g. &ldquo;Books (Readarr)&rdquo;).
+                            </div>
+                        </div>
+
+                        <div class="checkboxContainer">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" id="cypherflixProviderEnabled" checked />
+                                <span>Enabled</span>
+                            </label>
+                        </div>
+
+                        <div id="cypherflixProviderFields"></div>
+
+                        <div class="verticalSection">
+                            <h3 class="sectionTitle">Capabilities</h3>
+                            <div class="fieldDescription">
+                                Tick the capabilities this instance should contribute. The framework only
+                                calls a provider method when its capability is enabled.
+                            </div>
+                            <div id="cypherflixProviderCapabilities"></div>
+                        </div>
+
+                        <div id="cypherflixProviderTestResult"
+                             class="fieldDescription"
+                             style="display: none; margin-bottom: 1em;"></div>
+
+                        <div>
+                            <button is="emby-button" type="button" class="raised" id="cypherflixProviderTest">
+                                <span>Test connection</span>
+                            </button>
+                            <button is="emby-button" type="button" class="raised button-submit" id="cypherflixProviderSave">
+                                <span>Save</span>
+                            </button>
+                            <button is="emby-button" type="button" class="raised" id="cypherflixProviderCancel">
+                                <span>Cancel</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
         </div>
     </div>
 
     <script type="text/javascript">
-        // Placeholder. Real logic lives in configPage.js (Task UI-002),
-        // loaded as an embedded resource via Web/configPage.js.
-        (function () {
-            console.log("[CypherflixHub] configPage placeholder loaded");
-        })();
+    (function () {
+        var PLUGIN_ID = "c1f1e571-7ba8-4d6a-9e2b-3a4f0c5d7e8b";
+        var SECRET_MASK = "***";
+
+        // Cache of provider type metadata (TypeId -> dto). Loaded once on pageshow.
+        var typesById = {};
+
+        // The instance currently being edited (or null when adding a new one).
+        // Holds the masked GET row so we can round-trip "***" for unchanged secrets.
+        var editingInstance = null;
+
+        // Currently selected type for the modal (when adding).
+        var selectedTypeId = null;
+
+        // -------------------------------------------------------------
+        // Page bootstrap
+        // -------------------------------------------------------------
+        document.addEventListener("pageshow", function (e) {
+            var page = e.target;
+            if (!page || !page.classList || !page.classList.contains("pluginConfigurationPage")) {
+                return;
+            }
+            if (!page.querySelector || !page.querySelector("#cypherflixHubConfigPage")) {
+                // Not our config page — another plugin's pageshow.
+                return;
+            }
+            initPage(page);
+        });
+
+        function initPage(page) {
+            // Wire form handlers once the elements exist on this page.
+            var meiliForm = page.querySelector(".cypherflixMeilisearchForm");
+            if (meiliForm) {
+                meiliForm.addEventListener("submit", function (ev) {
+                    ev.preventDefault();
+                    saveMeilisearch(page);
+                    return false;
+                });
+            }
+
+            var addBtn = page.querySelector("#cypherflixAddProviderBtn");
+            if (addBtn) {
+                addBtn.addEventListener("click", function () { openAddModal(page); });
+            }
+
+            var typeNext = page.querySelector("#cypherflixProviderTypeNext");
+            if (typeNext) {
+                typeNext.addEventListener("click", function () { onTypeNext(page); });
+            }
+            var typeCancel = page.querySelector("#cypherflixProviderTypeCancel");
+            if (typeCancel) {
+                typeCancel.addEventListener("click", function () { closeModal(page); });
+            }
+            var formCancel = page.querySelector("#cypherflixProviderCancel");
+            if (formCancel) {
+                formCancel.addEventListener("click", function () { closeModal(page); });
+            }
+
+            var typeSelect = page.querySelector("#cypherflixProviderTypeSelect");
+            if (typeSelect) {
+                typeSelect.addEventListener("change", function () {
+                    updateTypeDescription(page);
+                });
+            }
+
+            var testBtn = page.querySelector("#cypherflixProviderTest");
+            if (testBtn) {
+                testBtn.addEventListener("click", function () { testProvider(page); });
+            }
+            var saveBtn = page.querySelector("#cypherflixProviderSave");
+            if (saveBtn) {
+                saveBtn.addEventListener("click", function () { saveProvider(page); });
+            }
+
+            // Kick off async loads.
+            loadConfig(page);
+            loadTypesAndProviders(page);
+        }
+
+        // -------------------------------------------------------------
+        // Meilisearch settings
+        // -------------------------------------------------------------
+        function loadConfig(page) {
+            Dashboard.showLoadingMsg();
+            ApiClient.getPluginConfiguration(PLUGIN_ID).then(function (config) {
+                Dashboard.hideLoadingMsg();
+                if (!config) { config = {}; }
+                var urlEl = page.querySelector("#cypherflixMeilisearchUrl");
+                var keyEl = page.querySelector("#cypherflixMeilisearchApiKey");
+                var intEl = page.querySelector("#cypherflixIndexIntervalMinutes");
+                if (urlEl) { urlEl.value = config.MeilisearchUrl || ""; }
+                if (keyEl) { keyEl.value = config.MeilisearchApiKey || ""; }
+                if (intEl) {
+                    intEl.value = (config.IndexIntervalMinutes != null && !isNaN(config.IndexIntervalMinutes))
+                        ? config.IndexIntervalMinutes
+                        : 60;
+                }
+            }).catch(function (err) {
+                Dashboard.hideLoadingMsg();
+                console.error("[CypherflixHub] getPluginConfiguration failed:", err);
+                Dashboard.alert("Failed to load plugin configuration.");
+            });
+        }
+
+        function saveMeilisearch(page) {
+            Dashboard.showLoadingMsg();
+            ApiClient.getPluginConfiguration(PLUGIN_ID).then(function (config) {
+                if (!config) { config = {}; }
+
+                var urlEl = page.querySelector("#cypherflixMeilisearchUrl");
+                var keyEl = page.querySelector("#cypherflixMeilisearchApiKey");
+                var intEl = page.querySelector("#cypherflixIndexIntervalMinutes");
+
+                config.MeilisearchUrl = urlEl ? (urlEl.value || "") : "";
+                config.MeilisearchApiKey = keyEl ? (keyEl.value || "") : "";
+
+                var parsed = intEl ? parseInt(intEl.value, 10) : 60;
+                if (isNaN(parsed) || parsed < 1) { parsed = 60; }
+                config.IndexIntervalMinutes = parsed;
+
+                ApiClient.updatePluginConfiguration(PLUGIN_ID, config).then(function (result) {
+                    Dashboard.processPluginConfigurationUpdateResult(result);
+                }).catch(function (err) {
+                    Dashboard.hideLoadingMsg();
+                    console.error("[CypherflixHub] updatePluginConfiguration failed:", err);
+                    Dashboard.alert("Failed to save Meilisearch settings.");
+                });
+            }).catch(function (err) {
+                Dashboard.hideLoadingMsg();
+                console.error("[CypherflixHub] getPluginConfiguration failed:", err);
+                Dashboard.alert("Failed to load plugin configuration.");
+            });
+        }
+
+        // -------------------------------------------------------------
+        // Provider types + instance list
+        // -------------------------------------------------------------
+        function loadTypesAndProviders(page) {
+            // Load types first, then providers (rendering instances depends on type metadata
+            // for the type-name lookup and the secret-masking behaviour).
+            loadTypes(page).then(function () {
+                return loadProviders(page);
+            }).catch(function (err) {
+                console.error("[CypherflixHub] loadTypesAndProviders failed:", err);
+            });
+        }
+
+        function loadTypes(page) {
+            return ApiClient.ajax({
+                type: "GET",
+                url: ApiClient.getUrl("CypherflixHub/Providers/Types"),
+                dataType: "json"
+            }).then(function (types) {
+                typesById = {};
+                if (Array.isArray(types)) {
+                    types.forEach(function (t) {
+                        if (t && t.TypeId) { typesById[t.TypeId] = t; }
+                    });
+                }
+
+                var sel = page.querySelector("#cypherflixProviderTypeSelect");
+                if (sel) {
+                    sel.innerHTML = "";
+                    Object.keys(typesById).forEach(function (typeId) {
+                        var t = typesById[typeId];
+                        var opt = document.createElement("option");
+                        opt.value = t.TypeId;
+                        opt.textContent = t.DisplayName || t.TypeId;
+                        sel.appendChild(opt);
+                    });
+                    updateTypeDescription(page);
+                }
+            }).catch(function (err) {
+                console.error("[CypherflixHub] GET /Providers/Types failed:", err);
+                Dashboard.alert("Failed to load provider types.");
+            });
+        }
+
+        function loadProviders(page) {
+            return ApiClient.ajax({
+                type: "GET",
+                url: ApiClient.getUrl("CypherflixHub/Providers"),
+                dataType: "json"
+            }).then(function (instances) {
+                renderProviders(page, Array.isArray(instances) ? instances : []);
+            }).catch(function (err) {
+                console.error("[CypherflixHub] GET /Providers failed:", err);
+                Dashboard.alert("Failed to load configured providers.");
+            });
+        }
+
+        function renderProviders(page, instances) {
+            var container = page.querySelector("#cypherflixProvidersList");
+            if (!container) { return; }
+            container.innerHTML = "";
+
+            if (!instances || instances.length === 0) {
+                var empty = document.createElement("div");
+                empty.className = "fieldDescription";
+                empty.id = "cypherflixProvidersEmpty";
+                empty.textContent = "No providers configured yet. Click “Add provider” to add one.";
+                container.appendChild(empty);
+                return;
+            }
+
+            instances.forEach(function (inst) {
+                container.appendChild(renderProviderRow(page, inst));
+            });
+        }
+
+        function renderProviderRow(page, instance) {
+            var row = document.createElement("div");
+            row.style.display = "flex";
+            row.style.alignItems = "center";
+            row.style.gap = "0.75em";
+            row.style.padding = "0.5em 0";
+            row.style.borderBottom = "1px solid var(--jf-palette-divider, rgba(255,255,255,.12))";
+
+            var type = typesById[instance.TypeId];
+
+            // Icon (or first letter fallback).
+            var icon = document.createElement("div");
+            icon.style.width = "32px";
+            icon.style.height = "32px";
+            icon.style.flex = "0 0 auto";
+            icon.style.borderRadius = "4px";
+            icon.style.background = "var(--jf-palette-action-hover, rgba(255,255,255,.08))";
+            icon.style.display = "flex";
+            icon.style.alignItems = "center";
+            icon.style.justifyContent = "center";
+            icon.style.fontWeight = "bold";
+            if (type && type.IconUrl) {
+                var img = document.createElement("img");
+                img.src = type.IconUrl;
+                img.alt = "";
+                img.style.maxWidth = "100%";
+                img.style.maxHeight = "100%";
+                icon.appendChild(img);
+            } else {
+                icon.textContent = (instance.Name || instance.TypeId || "?").charAt(0).toUpperCase();
+            }
+            row.appendChild(icon);
+
+            // Name + type
+            var info = document.createElement("div");
+            info.style.flex = "1 1 auto";
+            info.style.minWidth = "0";
+
+            var nameLine = document.createElement("div");
+            nameLine.textContent = instance.Name || "(unnamed)";
+            nameLine.style.fontWeight = "600";
+            info.appendChild(nameLine);
+
+            var typeLine = document.createElement("div");
+            typeLine.className = "fieldDescription";
+            typeLine.style.margin = "0";
+            typeLine.textContent = type ? type.DisplayName : instance.TypeId;
+            info.appendChild(typeLine);
+
+            row.appendChild(info);
+
+            // Enabled toggle
+            var toggleLabel = document.createElement("label");
+            toggleLabel.style.display = "flex";
+            toggleLabel.style.alignItems = "center";
+            toggleLabel.style.gap = "0.25em";
+            var toggle = document.createElement("input");
+            toggle.setAttribute("is", "emby-checkbox");
+            toggle.type = "checkbox";
+            toggle.checked = !!instance.Enabled;
+            toggle.addEventListener("change", function () {
+                toggleEnabled(page, instance, toggle.checked);
+            });
+            var toggleText = document.createElement("span");
+            toggleText.textContent = "Enabled";
+            toggleLabel.appendChild(toggle);
+            toggleLabel.appendChild(toggleText);
+            row.appendChild(toggleLabel);
+
+            // Edit button
+            var editBtn = document.createElement("button");
+            editBtn.setAttribute("is", "emby-button");
+            editBtn.type = "button";
+            editBtn.className = "raised";
+            var editSpan = document.createElement("span");
+            editSpan.textContent = "Edit";
+            editBtn.appendChild(editSpan);
+            editBtn.addEventListener("click", function () { openEditModal(page, instance); });
+            row.appendChild(editBtn);
+
+            // Delete button
+            var deleteBtn = document.createElement("button");
+            deleteBtn.setAttribute("is", "emby-button");
+            deleteBtn.type = "button";
+            deleteBtn.className = "raised";
+            var deleteSpan = document.createElement("span");
+            deleteSpan.textContent = "Delete";
+            deleteBtn.appendChild(deleteSpan);
+            deleteBtn.addEventListener("click", function () { deleteProvider(page, instance); });
+            row.appendChild(deleteBtn);
+
+            return row;
+        }
+
+        function toggleEnabled(page, instance, enabled) {
+            // Round-trip the masked GET row so secrets stay as "***" and the back-end keeps the originals.
+            var payload = cloneInstance(instance);
+            payload.Enabled = !!enabled;
+
+            Dashboard.showLoadingMsg();
+            ApiClient.ajax({
+                type: "POST",
+                url: ApiClient.getUrl("CypherflixHub/Providers"),
+                contentType: "application/json",
+                dataType: "json",
+                data: JSON.stringify(payload)
+            }).then(function () {
+                Dashboard.hideLoadingMsg();
+                return loadProviders(page);
+            }).catch(function (err) {
+                Dashboard.hideLoadingMsg();
+                console.error("[CypherflixHub] toggle Enabled failed:", err);
+                Dashboard.alert("Failed to update provider.");
+                loadProviders(page);
+            });
+        }
+
+        function deleteProvider(page, instance) {
+            if (!instance || !instance.Id) { return; }
+            var label = instance.Name || instance.TypeId || "this provider";
+            if (!window.confirm("Delete “" + label + "”? This cannot be undone.")) {
+                return;
+            }
+
+            Dashboard.showLoadingMsg();
+            ApiClient.ajax({
+                type: "DELETE",
+                url: ApiClient.getUrl("CypherflixHub/Providers/" + encodeURIComponent(instance.Id))
+            }).then(function () {
+                Dashboard.hideLoadingMsg();
+                loadProviders(page);
+            }).catch(function (err) {
+                Dashboard.hideLoadingMsg();
+                console.error("[CypherflixHub] DELETE /Providers failed:", err);
+                Dashboard.alert("Failed to delete provider.");
+            });
+        }
+
+        // -------------------------------------------------------------
+        // Modal: open / close
+        // -------------------------------------------------------------
+        function openAddModal(page) {
+            editingInstance = null;
+            selectedTypeId = null;
+
+            var modal = page.querySelector("#cypherflixProviderModal");
+            var title = page.querySelector("#cypherflixModalTitle");
+            var stepType = page.querySelector("#cypherflixModalStepType");
+            var stepForm = page.querySelector("#cypherflixModalStepForm");
+            if (!modal) { return; }
+
+            if (title) { title.textContent = "Add provider"; }
+            if (stepType) { stepType.style.display = ""; }
+            if (stepForm) { stepForm.style.display = "none"; }
+
+            var sel = page.querySelector("#cypherflixProviderTypeSelect");
+            if (sel && sel.options.length > 0) {
+                sel.selectedIndex = 0;
+                updateTypeDescription(page);
+            }
+
+            modal.style.display = "flex";
+        }
+
+        function openEditModal(page, instance) {
+            editingInstance = instance;
+            selectedTypeId = instance.TypeId;
+
+            var modal = page.querySelector("#cypherflixProviderModal");
+            var title = page.querySelector("#cypherflixModalTitle");
+            var stepType = page.querySelector("#cypherflixModalStepType");
+            var stepForm = page.querySelector("#cypherflixModalStepForm");
+            if (!modal) { return; }
+
+            if (title) { title.textContent = "Edit provider"; }
+            if (stepType) { stepType.style.display = "none"; }
+            if (stepForm) { stepForm.style.display = ""; }
+
+            renderForm(page, instance);
+            modal.style.display = "flex";
+        }
+
+        function closeModal(page) {
+            var modal = page.querySelector("#cypherflixProviderModal");
+            if (modal) { modal.style.display = "none"; }
+            var testResult = page.querySelector("#cypherflixProviderTestResult");
+            if (testResult) {
+                testResult.style.display = "none";
+                testResult.textContent = "";
+            }
+            editingInstance = null;
+            selectedTypeId = null;
+        }
+
+        function updateTypeDescription(page) {
+            var sel = page.querySelector("#cypherflixProviderTypeSelect");
+            var desc = page.querySelector("#cypherflixProviderTypeDescription");
+            if (!sel || !desc) { return; }
+            var t = typesById[sel.value];
+            desc.textContent = t ? (t.Description || "") : "";
+        }
+
+        function onTypeNext(page) {
+            var sel = page.querySelector("#cypherflixProviderTypeSelect");
+            if (!sel || !sel.value) {
+                Dashboard.alert("Please pick a provider type.");
+                return;
+            }
+            selectedTypeId = sel.value;
+            editingInstance = null;
+
+            var stepType = page.querySelector("#cypherflixModalStepType");
+            var stepForm = page.querySelector("#cypherflixModalStepForm");
+            if (stepType) { stepType.style.display = "none"; }
+            if (stepForm) { stepForm.style.display = ""; }
+
+            renderForm(page, null);
+        }
+
+        // -------------------------------------------------------------
+        // Modal: render dynamic form from ConfigSchema
+        // -------------------------------------------------------------
+        function renderForm(page, instance) {
+            var t = typesById[selectedTypeId];
+            if (!t) {
+                Dashboard.alert("Unknown provider type.");
+                return;
+            }
+
+            // Pre-fill name + enabled
+            var nameEl = page.querySelector("#cypherflixProviderName");
+            if (nameEl) { nameEl.value = instance ? (instance.Name || "") : ""; }
+            var enabledEl = page.querySelector("#cypherflixProviderEnabled");
+            if (enabledEl) { enabledEl.checked = instance ? !!instance.Enabled : true; }
+
+            // Build values map from existing instance for pre-fill.
+            var values = {};
+            if (instance && Array.isArray(instance.Config)) {
+                instance.Config.forEach(function (e) {
+                    if (e && e.Key) { values[e.Key] = e.Value || ""; }
+                });
+            }
+
+            var fieldsContainer = page.querySelector("#cypherflixProviderFields");
+            if (!fieldsContainer) { return; }
+            fieldsContainer.innerHTML = "";
+
+            var schema = Array.isArray(t.ConfigSchema) ? t.ConfigSchema : [];
+            schema.forEach(function (field) {
+                fieldsContainer.appendChild(buildFieldRow(field, values, !!instance));
+            });
+
+            // Capabilities checkboxes
+            var capsContainer = page.querySelector("#cypherflixProviderCapabilities");
+            if (capsContainer) {
+                capsContainer.innerHTML = "";
+                var supported = Array.isArray(t.SupportedCapabilities) ? t.SupportedCapabilities : [];
+                var enabledCaps = (instance && Array.isArray(instance.EnabledCapabilities))
+                    ? instance.EnabledCapabilities
+                    : supported.slice(); // sensible default for new instances: enable all
+
+                supported.forEach(function (cap) {
+                    var label = document.createElement("label");
+                    label.className = "checkboxContainer";
+                    label.style.display = "block";
+
+                    var input = document.createElement("input");
+                    input.setAttribute("is", "emby-checkbox");
+                    input.type = "checkbox";
+                    input.value = cap;
+                    input.dataset.capability = cap;
+                    input.checked = enabledCaps.indexOf(cap) !== -1;
+
+                    var span = document.createElement("span");
+                    span.textContent = cap;
+
+                    label.appendChild(input);
+                    label.appendChild(span);
+                    capsContainer.appendChild(label);
+                });
+            }
+
+            // Reset test result
+            var testResult = page.querySelector("#cypherflixProviderTestResult");
+            if (testResult) {
+                testResult.style.display = "none";
+                testResult.textContent = "";
+            }
+        }
+
+        function buildFieldRow(field, values, isEditing) {
+            var key = field.Key || "";
+            var existingValue = values.hasOwnProperty(key) ? values[key] : null;
+            var fieldType = (field.Type || "Text");
+
+            var wrap = document.createElement("div");
+            var inputId = "cypherflixProviderField_" + key;
+
+            if (fieldType === "Boolean") {
+                wrap.className = "checkboxContainer";
+                var label = document.createElement("label");
+                var input = document.createElement("input");
+                input.setAttribute("is", "emby-checkbox");
+                input.type = "checkbox";
+                input.id = inputId;
+                input.dataset.fieldKey = key;
+                input.dataset.fieldType = fieldType;
+
+                var initial = existingValue != null
+                    ? existingValue
+                    : (field.Default != null ? field.Default : "");
+                input.checked = (initial === "true" || initial === true);
+
+                var span = document.createElement("span");
+                span.textContent = field.Label || key;
+
+                label.appendChild(input);
+                label.appendChild(span);
+                wrap.appendChild(label);
+
+                if (field.Description) {
+                    var desc = document.createElement("div");
+                    desc.className = "fieldDescription";
+                    desc.textContent = field.Description;
+                    wrap.appendChild(desc);
+                }
+                return wrap;
+            }
+
+            wrap.className = "inputContainer";
+            var labelEl = document.createElement("label");
+            labelEl.className = "inputLabel inputLabelUnfocused";
+            labelEl.setAttribute("for", inputId);
+            labelEl.textContent = field.Label || key;
+            if (field.Required) { labelEl.textContent += " *"; }
+            wrap.appendChild(labelEl);
+
+            var inputEl;
+            if (fieldType === "Multiline") {
+                inputEl = document.createElement("textarea");
+                inputEl.setAttribute("is", "emby-textarea");
+            } else if (fieldType === "Select") {
+                inputEl = document.createElement("select");
+                inputEl.setAttribute("is", "emby-select");
+                var options = Array.isArray(field.Options) ? field.Options : [];
+                options.forEach(function (opt) {
+                    var o = document.createElement("option");
+                    o.value = opt.Value != null ? opt.Value : "";
+                    o.textContent = opt.Label != null ? opt.Label : o.value;
+                    inputEl.appendChild(o);
+                });
+            } else {
+                inputEl = document.createElement("input");
+                inputEl.setAttribute("is", "emby-input");
+                if (fieldType === "Password" || fieldType === "ApiKey") {
+                    inputEl.type = "password";
+                } else if (fieldType === "Number") {
+                    inputEl.type = "number";
+                } else if (fieldType === "Url") {
+                    inputEl.type = "text";
+                } else {
+                    inputEl.type = "text";
+                }
+                if (field.Placeholder) { inputEl.placeholder = field.Placeholder; }
+            }
+            inputEl.id = inputId;
+            inputEl.dataset.fieldKey = key;
+            inputEl.dataset.fieldType = fieldType;
+
+            // Pre-fill: the back-end masks secrets as "***" when reading. We send "***" back
+            // unchanged on save so the back-end keeps the original secret.
+            var initialValue;
+            if (existingValue != null) {
+                initialValue = existingValue;
+            } else if (!isEditing && field.Default != null) {
+                initialValue = field.Default;
+            } else {
+                initialValue = "";
+            }
+
+            if (fieldType === "Select") {
+                // Set selected option (fall back to first option).
+                var matched = false;
+                for (var i = 0; i < inputEl.options.length; i++) {
+                    if (inputEl.options[i].value === initialValue) {
+                        inputEl.selectedIndex = i;
+                        matched = true;
+                        break;
+                    }
+                }
+                if (!matched && inputEl.options.length > 0) { inputEl.selectedIndex = 0; }
+            } else if (fieldType === "Password" || fieldType === "ApiKey") {
+                // Show the mask in the input as a placeholder hint plus pre-filled value
+                // so that on save we round-trip "***" and the back-end preserves the
+                // existing secret. The admin types over it to set a new value.
+                inputEl.value = initialValue;
+                if (initialValue === SECRET_MASK) {
+                    inputEl.placeholder = SECRET_MASK;
+                }
+            } else {
+                inputEl.value = initialValue;
+            }
+
+            wrap.appendChild(inputEl);
+
+            if (field.Description) {
+                var d = document.createElement("div");
+                d.className = "fieldDescription";
+                d.textContent = field.Description;
+                wrap.appendChild(d);
+            }
+            return wrap;
+        }
+
+        // -------------------------------------------------------------
+        // Modal: collect values into an instance payload
+        // -------------------------------------------------------------
+        function collectInstance(page) {
+            var t = typesById[selectedTypeId];
+            if (!t) { return null; }
+
+            var nameEl = page.querySelector("#cypherflixProviderName");
+            var enabledEl = page.querySelector("#cypherflixProviderEnabled");
+
+            var instance = {
+                Id: editingInstance && editingInstance.Id ? editingInstance.Id : "00000000-0000-0000-0000-000000000000",
+                TypeId: selectedTypeId,
+                Name: nameEl ? (nameEl.value || "") : "",
+                Enabled: enabledEl ? !!enabledEl.checked : true,
+                EnabledCapabilities: [],
+                Config: []
+            };
+
+            var capInputs = page.querySelectorAll("#cypherflixProviderCapabilities input[type='checkbox']");
+            for (var i = 0; i < capInputs.length; i++) {
+                if (capInputs[i].checked) {
+                    instance.EnabledCapabilities.push(capInputs[i].value);
+                }
+            }
+
+            var fieldNodes = page.querySelectorAll("#cypherflixProviderFields [data-field-key]");
+            for (var j = 0; j < fieldNodes.length; j++) {
+                var node = fieldNodes[j];
+                var key = node.dataset.fieldKey;
+                var fieldType = node.dataset.fieldType;
+                if (!key) { continue; }
+
+                var value = "";
+                if (fieldType === "Boolean") {
+                    value = node.checked ? "true" : "false";
+                } else if (node.tagName === "SELECT") {
+                    value = node.value || "";
+                } else {
+                    value = node.value != null ? String(node.value) : "";
+                }
+                instance.Config.push({ Key: key, Value: value });
+            }
+
+            return instance;
+        }
+
+        // -------------------------------------------------------------
+        // Modal: Test connection
+        // -------------------------------------------------------------
+        function testProvider(page) {
+            var instance = collectInstance(page);
+            if (!instance) { return; }
+
+            var testResult = page.querySelector("#cypherflixProviderTestResult");
+            Dashboard.showLoadingMsg();
+            ApiClient.ajax({
+                type: "POST",
+                url: ApiClient.getUrl("CypherflixHub/Providers/Test"),
+                contentType: "application/json",
+                dataType: "json",
+                data: JSON.stringify(instance)
+            }).then(function (result) {
+                Dashboard.hideLoadingMsg();
+                if (testResult) {
+                    testResult.style.display = "";
+                    var ok = result && result.Ok === true;
+                    var colour = ok
+                        ? "var(--jf-palette-primary-main, #00a4dc)"
+                        : "var(--jf-palette-error-main, #c62828)";
+                    testResult.style.color = colour;
+                    var msg = (result && result.Message) ? result.Message : (ok ? "OK" : "Test failed.");
+                    if (result && result.Detail) { msg += " — " + result.Detail; }
+                    testResult.textContent = msg;
+                }
+            }).catch(function (err) {
+                Dashboard.hideLoadingMsg();
+                console.error("[CypherflixHub] POST /Providers/Test failed:", err);
+                if (testResult) {
+                    testResult.style.display = "";
+                    testResult.style.color = "var(--jf-palette-error-main, #c62828)";
+                    testResult.textContent = "Test request failed (see browser console).";
+                }
+            });
+        }
+
+        // -------------------------------------------------------------
+        // Modal: Save
+        // -------------------------------------------------------------
+        function saveProvider(page) {
+            var instance = collectInstance(page);
+            if (!instance) { return; }
+
+            if (!instance.Name || !instance.Name.trim()) {
+                Dashboard.alert("Please enter a name.");
+                return;
+            }
+
+            Dashboard.showLoadingMsg();
+            ApiClient.ajax({
+                type: "POST",
+                url: ApiClient.getUrl("CypherflixHub/Providers"),
+                contentType: "application/json",
+                dataType: "json",
+                data: JSON.stringify(instance)
+            }).then(function () {
+                Dashboard.hideLoadingMsg();
+                closeModal(page);
+                loadProviders(page);
+            }).catch(function (err) {
+                Dashboard.hideLoadingMsg();
+                console.error("[CypherflixHub] POST /Providers failed:", err);
+                var msg = "Failed to save provider.";
+                if (err && err.responseText) {
+                    try {
+                        var body = JSON.parse(err.responseText);
+                        if (body && body.Error) { msg = body.Error; }
+                    } catch (e) { /* not JSON */ }
+                }
+                Dashboard.alert(msg);
+            });
+        }
+
+        // -------------------------------------------------------------
+        // Helpers
+        // -------------------------------------------------------------
+        function cloneInstance(instance) {
+            return {
+                Id: instance.Id,
+                TypeId: instance.TypeId,
+                Name: instance.Name || "",
+                Enabled: !!instance.Enabled,
+                EnabledCapabilities: Array.isArray(instance.EnabledCapabilities)
+                    ? instance.EnabledCapabilities.slice()
+                    : [],
+                Config: Array.isArray(instance.Config)
+                    ? instance.Config.map(function (e) { return { Key: e.Key, Value: e.Value }; })
+                    : []
+            };
+        }
+    })();
     </script>
 </div>
 </body>
