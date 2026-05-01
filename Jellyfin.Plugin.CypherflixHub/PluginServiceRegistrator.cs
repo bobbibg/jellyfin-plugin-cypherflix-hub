@@ -1,3 +1,5 @@
+using System;
+using System.Net.Http;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,10 +18,20 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         // Core registry that holds all known provider types.
         serviceCollection.AddSingleton<Core.ProviderRegistry>();
 
+        // ---- Shared HTTP client used by provider HTTP clients --------------
+        // Jellyfin doesn't expose IHttpClientFactory to plugins, so we register
+        // a single HttpClient with a generous default timeout. The clients
+        // themselves are stateless and pass per-request URLs/keys explicitly.
+        serviceCollection.AddSingleton<HttpClient>(_ => new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(30)
+        });
+
         // ---- Provider type registrations go here ----
         serviceCollection.AddSingleton<Providers.Jellyfin.JellyfinClient>();
         serviceCollection.AddSingleton<Core.IMediaProvider, Providers.Jellyfin.JellyfinProvider>();
-        // serviceCollection.AddSingleton<Core.IMediaProvider, Providers.JellyseerrProvider>();
+        serviceCollection.AddSingleton<Providers.Jellyseerr.JellyseerrClient>();
+        serviceCollection.AddSingleton<Core.IMediaProvider, Providers.Jellyseerr.JellyseerrProvider>();
         // serviceCollection.AddSingleton<Core.IMediaProvider, Providers.ReadarrProvider>();
         // serviceCollection.AddSingleton<Core.IMediaProvider, Providers.ReadMeABookProvider>();
 

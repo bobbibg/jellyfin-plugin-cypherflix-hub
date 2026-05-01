@@ -12,6 +12,7 @@ public class PluginConfiguration : BasePluginConfiguration
         MeilisearchUrl = "http://meilisearch:7700";
         MeilisearchApiKey = "";
         IndexIntervalMinutes = 60;
+        JellyseerrUserMap = Array.Empty<JellyseerrUserMapping>();
     }
 
     /// <summary>Configured provider instances. The admin UI manages this list.</summary>
@@ -25,6 +26,14 @@ public class PluginConfiguration : BasePluginConfiguration
 
     /// <summary>How often the indexer runs each provider (minutes).</summary>
     public int IndexIntervalMinutes { get; set; }
+
+    /// <summary>
+    /// Cached mapping of Jellyfin user GUID → Jellyseerr user id. Populated on
+    /// first request submission (and on first call to GetRequestStatusesAsync) by
+    /// matching the Jellyfin username against the Jellyseerr user list. Stored
+    /// here so we don't have to re-resolve on every request.
+    /// </summary>
+    public JellyseerrUserMapping[] JellyseerrUserMap { get; set; }
 }
 
 /// <summary>
@@ -50,4 +59,14 @@ public class ConfigEntry
 {
     public string Key { get; set; } = "";
     public string Value { get; set; } = "";
+}
+
+/// <summary>
+/// One row in <see cref="PluginConfiguration.JellyseerrUserMap"/>. XML-friendly
+/// shape (no dictionaries) so Jellyfin's XML serialiser produces clean output.
+/// </summary>
+public class JellyseerrUserMapping
+{
+    public Guid JellyfinUserId { get; set; }
+    public int JellyseerrUserId { get; set; }
 }
