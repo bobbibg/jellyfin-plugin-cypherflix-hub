@@ -15,6 +15,14 @@
     ],
     "versions": [
       {
+        "version": "0.2.3.0",
+        "changelog": "Automated release",
+        "targetAbi": "10.11.8.0",
+        "sourceUrl": "https://github.com/bobbibg/jellyfin-plugin-cypherflix-hub/releases/download/v0.2.3/cypherflix-hub_0.2.3.zip",
+        "checksum": "87dcc07687b371aa582148ba765557a5",
+        "timestamp": "2026-05-01T15:29:06Z"
+      },
+      {
         "version": "0.2.2.0",
         "changelog": "Automated release",
         "targetAbi": "10.11.8.0",
