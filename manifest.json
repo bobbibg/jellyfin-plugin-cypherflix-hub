@@ -7,7 +7,16 @@
     "overview": "Adds Discover / Requests / Calendar tabs to Jellyfin. Provider framework lets you plug in Jellyseerr, Readarr instances, ReadMeABook, and future services via the admin UI without code changes.",
     "owner": "bobbibg",
     "imageUrl": "",
-    "_dependencies_TODO": "OPS-001 must add a dependencies array referencing the File Transformation plugin GUID — open question #1 in JELLYFIN-INTEGRATION.md.",
-    "versions": []
+    "_dependencies_TODO": "OPS-001 must add a dependencies array referencing the File Transformation plugin GUID \u2014 open question #1 in JELLYFIN-INTEGRATION.md.",
+    "versions": [
+      {
+        "version": "0.1.0.0",
+        "changelog": "Automated release",
+        "targetAbi": "10.10.7.0",
+        "sourceUrl": "https://github.com/bobbibg/jellyfin-plugin-cypherflix-hub/releases/download/v0.1.0/cypherflix-hub_0.1.0.zip",
+        "checksum": "d8d30f698591be8a3c105f6d388ab65b",
+        "timestamp": "2026-05-01T11:23:35Z"
+      }
+    ]
   }
 ]
