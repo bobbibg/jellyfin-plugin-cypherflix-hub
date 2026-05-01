@@ -23,7 +23,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         // serviceCollection.AddSingleton<Core.IMediaProvider, Providers.ReadMeABookProvider>();
 
         // ---- Cross-cutting services ----
-        // serviceCollection.AddSingleton<Services.MeilisearchClient>();
+        serviceCollection.AddSingleton<Services.MeilisearchClient>();
         // serviceCollection.AddHostedService<Services.IndexerService>();
 
         // ---- Aggregators ----
