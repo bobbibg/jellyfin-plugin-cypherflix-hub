@@ -127,25 +127,6 @@ single source of truth for which MediaType your IndexDocuments use.
 
 ---
 
-## PROV-004 — ReadMeABook provider
-
-```
-{{universal preamble}}
-
-Your task: tasks/PROV-004-readmeabook.md
-
-NOTE: This provider is BLOCKED until ReadMeABook is deployed to the homelab
-and its API is documented. If you pick this up before that's done, either:
-(a) ping Bobbi and pause, or
-(b) ship a stub provider that returns empty results, leaving TODOs for the
-    real implementation.
-
-If shipping a stub, mark the spec status as "stub-only — needs ReadMeABook
-deployment before completion".
-```
-
----
-
 ## SVC-001 — MeilisearchClient
 
 ```

@@ -1,7 +1,7 @@
 # Cypherflix Hub
 
 A Jellyfin plugin that adds **Discover / Requests / Calendar** tabs across
-your whole stack — Jellyseerr, Readarr, ReadMeABook, Spotify, anything you
+your whole stack — Jellyseerr, Readarr, Spotify, anything you
 plug in via the provider framework. Replaces the JF Enhanced
 Requests/Calendar tabs with multi-provider versions and adds
 Meilisearch-backed unified search.

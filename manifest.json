@@ -3,8 +3,8 @@
     "category": "General",
     "guid": "c1f1e571-7ba8-4d6a-9e2b-3a4f0c5d7e8b",
     "name": "Cypherflix Hub",
-    "description": "Unified search, discover, requests, and calendar across Jellyseerr, Readarr, ReadMeABook, and any provider you wire up. Multi-provider replacement for the JF Enhanced Requests/Calendar tabs.",
-    "overview": "Adds Discover / Requests / Calendar tabs to Jellyfin. Provider framework lets you plug in Jellyseerr, Readarr instances, ReadMeABook, and future services via the admin UI without code changes.",
+    "description": "Unified search, discover, requests, and calendar across Jellyseerr, Readarr, and any provider you wire up. Multi-provider replacement for the JF Enhanced Requests/Calendar tabs.",
+    "overview": "Adds Discover / Requests / Calendar tabs to Jellyfin. Provider framework lets you plug in Jellyseerr, Readarr instances, and future services via the admin UI without code changes.",
     "owner": "bobbibg",
     "imageUrl": "",
     "dependencies": [

@@ -6,7 +6,7 @@ namespace Jellyfin.Plugin.CypherflixHub.Core;
 
 /// <summary>
 /// The contract every provider implements. One C# class per provider TYPE
-/// (Jellyseerr, Readarr, ReadMeABook, Spotify, …). Multiple INSTANCES of a type
+/// (Jellyseerr, Readarr, Spotify, …). Multiple INSTANCES of a type
 /// can be configured by the admin (e.g. two Readarr instances, one for books
 /// and one for comics, each with their own URL + API key).
 ///

@@ -26,7 +26,6 @@ CORE-* (done)
    ├──→ PROV-001 (Jellyfin)            ──┐
    ├──→ PROV-002 (Jellyseerr)          ──┤
    ├──→ PROV-003 (Readarr)             ──┤  Can run all PROV in parallel
-   ├──→ PROV-004 (ReadMeABook)         ──┤
    └──→ ... future providers           ──┘
                                           │
    SVC-001 (MeilisearchClient)            │
