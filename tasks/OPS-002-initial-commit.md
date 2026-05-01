@@ -33,4 +33,4 @@ gh repo create bobbibg/jellyfin-plugin-cypherflix-hub --public --source=. --remo
 
 ---
 
-Status: not-started
+Status: done
