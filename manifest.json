@@ -6,7 +6,7 @@
     "description": "Unified search, discover, requests, and calendar across Jellyseerr, Readarr, and any provider you wire up. Multi-provider replacement for the JF Enhanced Requests/Calendar tabs.",
     "overview": "Adds Discover / Requests / Calendar tabs to Jellyfin. Provider framework lets you plug in Jellyseerr, Readarr instances, and future services via the admin UI without code changes.",
     "owner": "bobbibg",
-    "imageUrl": "",
+    "imageUrl": "https://raw.githubusercontent.com/bobbibg/jellyfin-plugin-cypherflix-hub/main/cypherfix-hub.png",
     "dependencies": [
       {
         "name": "File Transformation",

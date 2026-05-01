@@ -373,12 +373,36 @@
             });
         }
 
+        // ASP.NET Core's default JsonNamingPolicy emits camelCase even though our
+        // C# DTOs are PascalCase. The rest of this file reads PascalCase keys
+        // (matching ARCHITECTURE.md and JELLYFIN-INTEGRATION.md), so every
+        // response is normalised to PascalCase keys via this walker. Idempotent:
+        // running it on already-PascalCase data is a no-op.
+        function pascalKeys(value) {
+            if (value === null || value === undefined) { return value; }
+            if (Array.isArray(value)) {
+                return value.map(pascalKeys);
+            }
+            if (typeof value === "object") {
+                var out = {};
+                for (var k in value) {
+                    if (Object.prototype.hasOwnProperty.call(value, k)) {
+                        var pk = k.length ? k.charAt(0).toUpperCase() + k.slice(1) : k;
+                        out[pk] = pascalKeys(value[k]);
+                    }
+                }
+                return out;
+            }
+            return value;
+        }
+
         function loadTypes(page) {
             return ApiClient.ajax({
                 type: "GET",
                 url: ApiClient.getUrl("CypherflixHub/Providers/Types"),
                 dataType: "json"
             }).then(function (types) {
+                types = pascalKeys(types);
                 typesById = {};
                 if (Array.isArray(types)) {
                     types.forEach(function (t) {
@@ -410,6 +434,7 @@
                 url: ApiClient.getUrl("CypherflixHub/Providers"),
                 dataType: "json"
             }).then(function (instances) {
+                instances = pascalKeys(instances);
                 renderProviders(page, Array.isArray(instances) ? instances : []);
             }).catch(function (err) {
                 console.error("[CypherflixHub] GET /Providers failed:", err);
@@ -913,6 +938,7 @@
                 dataType: "json",
                 data: JSON.stringify(instance)
             }).then(function (result) {
+                result = pascalKeys(result);
                 Dashboard.hideLoadingMsg();
                 if (testResult) {
                     testResult.style.display = "";
