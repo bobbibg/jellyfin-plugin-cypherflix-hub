@@ -380,6 +380,32 @@ For the page root:
 Sources: SendToKindle's working configPage.html and the Jellyfin plugin
 template at https://raw.githubusercontent.com/jellyfin/jellyfin-plugin-template/master/Jellyfin.Plugin.Template/Configuration/configPage.html.
 
+### 4.1.1 Item-card classes (used by UI-003 / UI-004 / UI-005)
+
+These are the class names jellyfin-web uses for library item cards. Reusing
+them on plugin-rendered cards means the cards inherit the active theme's card
+sizing, hover overlay, and aspect-ratio handling without us shipping
+duplicate CSS.
+
+| Class | Role |
+|---|---|
+| `itemsContainer` | The grid wrapper around a row/grid of cards. Added by `<div is="emby-itemscontainer">` in its `createdCallback`. |
+| `cardBox` | Outer wrapper around a single card (handles spacing between cards). |
+| `card` | The card element itself. Variants combine with shape modifiers like `portraitCard` / `backdropCard` / `squareCard`. |
+| `cardScalable` | Scaling container that holds the image + padder. |
+| `cardPadder` | Aspect-ratio maintainer; combine with `cardPadder-portrait` / `cardPadder-backdrop` / `cardPadder-square`. |
+| `cardImageContainer` | Holds the actual `<img>` (or background-image div) for the poster. |
+| `cardContent` | Generic content wrapper inside `cardScalable`. |
+| `cardOverlayContainer` | Hover/focus overlay layer (where the play button etc. sits in native cards). |
+| `cardText` | Title/subtitle text below the image. |
+| `cardFooter` / `innerCardFooter` | Footer band under the image (used for status pills etc.). |
+
+Sources:
+
+- `cardBuilder.js` enumerates every one of these names — https://raw.githubusercontent.com/jellyfin/jellyfin-web/v10.10.7/src/components/cardbuilder/cardBuilder.js
+- The base styling lives in `src/components/cardbuilder/card.scss` (referenced via `import './card.scss';` at the top of `cardBuilder.js`).
+- `itemsContainer` is the base class added by the custom element — https://raw.githubusercontent.com/jellyfin/jellyfin-web/v10.10.7/src/elements/emby-itemscontainer/emby-itemscontainer.js
+
 ### 4.2 Global JS objects available
 
 Available on every dashboard page once the script loads:
