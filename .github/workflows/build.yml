@@ -28,10 +28,10 @@ jobs:
           # that can do that. GITHUB_TOKEN with contents: write is fine.
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup .NET 8
+      - name: Setup .NET 9
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 9.0.x
 
       - name: Read version from csproj
         id: version
@@ -81,7 +81,7 @@ jobs:
         run: |
           set -euo pipefail
           OUT=out
-          BIN=Jellyfin.Plugin.CypherflixHub/bin/Release/net8.0
+          BIN=Jellyfin.Plugin.CypherflixHub/bin/Release/net9.0
           STAGE=stage
           mkdir -p "$STAGE"
 
@@ -204,7 +204,7 @@ jobs:
           entry = {
               "version":    f"{version}.0",
               "changelog":  "Automated release",
-              "targetAbi":  "10.10.7.0",
+              "targetAbi":  "10.11.8.0",
               "sourceUrl":  download,
               "checksum":   md5,
               "timestamp":  timestamp,

@@ -16,10 +16,10 @@ it. No invented names.
 
 | Type | Namespace | NuGet package | Source |
 |---|---|---|---|
-| `BasePlugin<TConfig>` | `MediaBrowser.Common.Plugins` | `Jellyfin.Controller` 10.10.7 | https://github.com/jellyfin/jellyfin |
+| `BasePlugin<TConfig>` | `MediaBrowser.Common.Plugins` | `Jellyfin.Controller` 10.11.8 | https://github.com/jellyfin/jellyfin |
 | `IHasWebPages` | `MediaBrowser.Common.Plugins` | `Jellyfin.Controller` | (same) |
 | `IPluginServiceRegistrator` | `MediaBrowser.Controller.Plugins` | `Jellyfin.Controller` | (same) |
-| `BasePluginConfiguration` | `MediaBrowser.Model.Plugins` | `Jellyfin.Model` 10.10.7 | (same) |
+| `BasePluginConfiguration` | `MediaBrowser.Model.Plugins` | `Jellyfin.Model` 10.11.8 | (same) |
 | `PluginPageInfo` | `MediaBrowser.Model.Plugins` | `Jellyfin.Model` | https://raw.githubusercontent.com/jellyfin/jellyfin/master/MediaBrowser.Model/Plugins/PluginPageInfo.cs |
 | `IApplicationPaths` | `MediaBrowser.Common.Configuration` | `Jellyfin.Common` | (same) |
 | `IXmlSerializer` | `MediaBrowser.Model.Serialization` | `Jellyfin.Model` | (same) |
@@ -33,8 +33,11 @@ it. No invented names.
 
 ### 1.1.1 `ILibraryManager` methods used by PROV-001
 
-Verified against `Jellyfin.Controller` 10.10.7 by reflecting the shipped DLL
-(`C:\Users\<u>\.nuget\packages\jellyfin.controller\10.10.7\lib\net8.0\MediaBrowser.Controller.dll`):
+Originally verified against `Jellyfin.Controller` 10.10.7 by reflecting the shipped DLL
+(`C:\Users\<u>\.nuget\packages\jellyfin.controller\10.10.7\lib\net8.0\MediaBrowser.Controller.dll`).
+Plugin now targets 10.11.8 / net9.0 — symbol surface re-verified by clean
+`dotnet build -c Release -warnaserror` (0/0); `BaseItemKind` enum values listed
+below are checked at runtime smoke-test time:
 
 ```csharp
 QueryResult<BaseItem> GetItemsResult(InternalItemsQuery query);
@@ -469,10 +472,10 @@ published output.
 ### 6.2 PrivateAssets on Jellyfin packages
 
 ```xml
-<PackageReference Include="Jellyfin.Controller" Version="10.10.7">
+<PackageReference Include="Jellyfin.Controller" Version="10.11.8">
   <PrivateAssets>all</PrivateAssets>
 </PackageReference>
-<PackageReference Include="Jellyfin.Model" Version="10.10.7">
+<PackageReference Include="Jellyfin.Model" Version="10.11.8">
   <PrivateAssets>all</PrivateAssets>
 </PackageReference>
 ```

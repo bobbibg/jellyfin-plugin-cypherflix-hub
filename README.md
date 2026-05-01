@@ -17,7 +17,7 @@ Meilisearch-backed unified search.
 Manifest URL:  https://raw.githubusercontent.com/bobbibg/jellyfin-plugin-cypherflix-hub/main/manifest.json
 ```
 
-Required Jellyfin version: **10.10.7**.
+Required Jellyfin version: **10.11.8** (built against the .NET 9 ABI introduced in JF 10.11).
 Required other plugins: **File Transformation** (used for SPA tab + page
 injection — see ARCHITECTURE.md §8.1).
 

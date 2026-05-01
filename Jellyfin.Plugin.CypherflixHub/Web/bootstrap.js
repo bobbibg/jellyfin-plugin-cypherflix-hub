@@ -3,7 +3,8 @@
  * Injected into Jellyfin's index.html by Services/IndexHtmlTransform.cs
  * (served as an embedded resource by Api/WebController.cs).
  *
- * Selectors and native markup verified against jellyfin-web v10.10.7 source.
+ * Selectors and native markup verified against jellyfin-web v10.10.7 source
+ * (the v10.10.x and v10.11.x lines share these classes — re-verify via smoke test).
  * See JELLYFIN-INTEGRATION.md §7.4 for the source citations.
  */
 (function () {

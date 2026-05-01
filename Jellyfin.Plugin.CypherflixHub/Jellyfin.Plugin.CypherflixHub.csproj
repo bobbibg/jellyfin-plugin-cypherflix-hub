@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net9.0</TargetFramework>
     <RootNamespace>Jellyfin.Plugin.CypherflixHub</RootNamespace>
     <AssemblyVersion>0.2.0.0</AssemblyVersion>
     <FileVersion>0.2.0.0</FileVersion>
@@ -14,10 +14,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Jellyfin.Controller" Version="10.10.7">
+    <PackageReference Include="Jellyfin.Controller" Version="10.11.8">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Jellyfin.Model" Version="10.10.7">
+    <PackageReference Include="Jellyfin.Model" Version="10.11.8">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Meilisearch" Version="0.15.4" />

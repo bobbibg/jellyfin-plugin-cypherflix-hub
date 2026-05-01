@@ -32,7 +32,7 @@ before adapting.
    {
      "version": "<x.y.z>.0",
      "changelog": "Automated release",
-     "targetAbi": "10.10.7.0",
+     "targetAbi": "10.11.8.0",
      "sourceUrl": "https://github.com/bobbibg/jellyfin-plugin-cypherflix-hub/releases/download/v<x.y.z>/cypherflix-hub_<x.y.z>.zip",
      "checksum": "<md5>",
      "timestamp": "<iso>"
@@ -44,7 +44,7 @@ before adapting.
 ## targetAbi
 
 Match `Jellyfin.Controller` / `Jellyfin.Model` package version. Currently
-`10.10.7.0`. Bump when those packages bump.
+`10.11.8.0`. Bump when those packages bump.
 
 ## Permissions
 

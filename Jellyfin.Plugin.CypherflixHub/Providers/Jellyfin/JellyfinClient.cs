@@ -22,8 +22,9 @@ public class JellyfinClient
 
     /// <summary>
     /// The <see cref="BaseItemKind"/> values this plugin treats as
-    /// user-facing media — verified against Jellyfin.Data 10.10.7. See
-    /// JELLYFIN-INTEGRATION.md §1.1.2.
+    /// user-facing media — originally verified against Jellyfin.Data 10.10.7;
+    /// build now targets 10.11.8 and the symbol surface still compiles.
+    /// See JELLYFIN-INTEGRATION.md §1.1.2.
     /// </summary>
     public static readonly BaseItemKind[] SupportedItemKinds =
     {
