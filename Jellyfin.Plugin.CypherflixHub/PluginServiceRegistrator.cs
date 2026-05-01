@@ -41,7 +41,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddHostedService<Services.IndexerService>();
 
         // ---- Aggregators ----
-        // serviceCollection.AddSingleton<Services.Aggregators.SearchAggregator>();
+        serviceCollection.AddSingleton<Services.Aggregators.SearchAggregator>();
         serviceCollection.AddSingleton<Services.Aggregators.RequestAggregator>();
         serviceCollection.AddSingleton<Services.Aggregators.CalendarAggregator>();
 
