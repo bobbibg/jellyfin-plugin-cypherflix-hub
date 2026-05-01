@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cypherflix Hub</title>
+</head>
+<body>
+<div id="cypherflixHubConfigPage"
+     data-role="page"
+     class="page type-interior pluginConfigurationPage"
+     data-require="emby-input,emby-button,emby-select,emby-checkbox">
+
+    <div data-role="content">
+        <div class="content-primary">
+
+            <div class="verticalSection verticalSection-extrabottompadding">
+                <h2 class="sectionTitle">Cypherflix Hub</h2>
+                <p>
+                    Configure providers (Jellyseerr, Readarr, ReadMeABook, &hellip;) and the
+                    Meilisearch instance used for unified search. Each provider type can have
+                    multiple instances — e.g. one Readarr for books and one for comics.
+                </p>
+                <p>
+                    Until the provider UI lands (Task <code>UI-002</code>), this page is a
+                    placeholder. Edit settings via <code>plugins/CypherflixHub.xml</code> in
+                    the Jellyfin config dir or wait for the next release.
+                </p>
+            </div>
+
+            <!-- Provider list will be rendered here by configPage.js (Task UI-002). -->
+            <div id="cypherflixHubProvidersContainer"></div>
+
+            <!-- Meilisearch settings will be rendered here (Task UI-002). -->
+            <div id="cypherflixHubMeilisearchContainer"></div>
+
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        // Placeholder. Real logic lives in configPage.js (Task UI-002),
+        // loaded as an embedded resource via Web/configPage.js.
+        (function () {
+            console.log("[CypherflixHub] configPage placeholder loaded");
+        })();
+    </script>
+</div>
+</body>
+</html>
