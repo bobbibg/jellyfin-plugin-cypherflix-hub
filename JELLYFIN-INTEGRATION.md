@@ -511,6 +511,44 @@ It requires the user to manually edit a JSON file (no programmatic API
 yet). For Cypherflix Hub we want zero-config: install plugin → tabs
 appear.
 
+### 7.4 Resolved selectors (jellyfin-web v10.10.7)
+
+Closes open question #2 (see §9). Sourced by reading the v10.10.7 web
+client source on GitHub (no live JF instance was available).
+
+| Purpose | Selector | Source |
+|---|---|---|
+| Title-bar tab strip container | `.skinHeader .headerTabs` | `src/components/maintabsmanager.js` — `headerTabsContainer = queryScope.querySelector('.headerTabs')`, where `queryScope = document.querySelector('.skinHeader')`. https://raw.githubusercontent.com/jellyfin/jellyfin-web/v10.10.7/src/components/maintabsmanager.js |
+| Tab strip element (renders inside `.headerTabs`) | `<div is="emby-tabs" class="tabs-viewmenubar">` containing `<div class="emby-tabs-slider">` | Same file — innerHTML template in `setTabs`. |
+| Native tab button markup | `<button type="button" is="emby-button" class="emby-tab-button" data-index="N"><div class="emby-button-foreground">Label</div></button>` | Same file — button-creation template in `setTabs`. |
+| Active tab class | `emby-tab-button-active` | `src/elements/emby-tabs/emby-tabs.js` — `const activeButtonClass = 'emby-tab-button-active'`. https://raw.githubusercontent.com/jellyfin/jellyfin-web/v10.10.7/src/elements/emby-tabs/emby-tabs.js |
+| Main page (view) container Jellyfin renders SPA pages into | `.mainAnimatedPages` | `src/components/viewContainer.js` — `document.querySelector('.mainAnimatedPages')`; views are appended as `<div class="mainAnimatedPage">…</div>`, currently visible page is `.mainAnimatedPage:not(.hide)`. Also documented in `src/components/AppBody.tsx`: `<div className='mainAnimatedPages skinBody' />`. https://raw.githubusercontent.com/jellyfin/jellyfin-web/v10.10.7/src/components/viewContainer.js, https://raw.githubusercontent.com/jellyfin/jellyfin-web/v10.10.7/src/components/AppBody.tsx |
+| Home page root (sanity-check selector — confirms we're on the right page) | `#indexPage.homePage` | `src/controllers/home.html` — `<div id="indexPage" class="page homePage libraryPage allLibraryPage backdropPage pageWithAbsoluteTabs withTabs">`. https://raw.githubusercontent.com/jellyfin/jellyfin-web/v10.10.7/src/controllers/home.html |
+
+Implementation notes for `bootstrap.js`:
+
+- Append our three tab buttons directly into `.headerTabs .emby-tabs-slider`.
+  If `.emby-tabs-slider` is absent (the strip hasn't been built yet on this
+  page), fall back to `.headerTabs` itself; Jellyfin re-creates the slider
+  on every navigation, so the watcher will re-attach next time.
+- Each Cypherflix tab button reuses the exact native markup (`is="emby-button"`,
+  `class="emby-tab-button"`, inner `<div class="emby-button-foreground">`).
+  Idempotency is keyed on a `data-cypherflix-tab="<id>"` attribute we own.
+- Native Jellyfin tabs carry a `data-index` attribute and are wired to the
+  `TabbedView` controller's tab manager. We deliberately do **not** set
+  `data-index` on our buttons — clicking ours updates `window.location.hash`
+  and is dispatched by our own router, not Jellyfin's.
+- Render Cypherflix pages into `.mainAnimatedPages`. We can use
+  `.mainAnimatedPage:not(.hide)` as a fallback target inside it, but
+  appending a fresh `<div>` we own (and clearing it on each route change)
+  is more robust against Jellyfin's view animations stomping on us.
+- One edge case to watch on a live deploy:
+  `TODO(UI-001): verify on live deploy` — Jellyfin re-renders `.headerTabs`
+  on every page navigation, which will wipe our injected tabs. We mitigate
+  this with a second `MutationObserver` on `.skinHeader` that re-injects
+  whenever our `data-cypherflix-tab` markers disappear, but the re-attach
+  cadence should be eyeballed against a real instance.
+
 ---
 
 ## 8. Readarr API (Servarr family — used by PROV-003)
@@ -598,7 +636,7 @@ manual testing.
 | # | Question | Owner | Status |
 |---|---|---|---|
 | 1 | What is the File Transformation plugin's official GUID? (For manifest dependency declaration.) | SVC-005 | **closed** — `5e87cc92-571a-4d8d-8d98-d2d4147f9f90`. Confirmed by `FileTransformationPlugin.Id` in the upstream source AND the published manifest at https://www.iamparadox.dev/jellyfin/plugins/manifest.json. Recorded in `manifest.json` and §2.5. |
-| 2 | What's the exact CSS selector for the Jellyfin title-bar tabs in 10.10.7? | first agent on UI-001 | open — inspect a live JF instance |
+| 2 | What's the exact CSS selector for the Jellyfin title-bar tabs in 10.10.7? | first agent on UI-001 | **closed** — `.skinHeader .headerTabs` (container) + `.emby-tabs-slider` (where buttons mount); native button markup `<button is="emby-button" class="emby-tab-button">…</button>`; main view container `.mainAnimatedPages`. Sourced from jellyfin-web v10.10.7 `src/components/maintabsmanager.js`, `src/elements/emby-tabs/emby-tabs.js`, `src/components/viewContainer.js`, `src/components/AppBody.tsx`, `src/controllers/home.html` — see §7.4 for the verbatim citations. One `TODO(UI-001): verify on live deploy` flagged: re-render cadence of `.headerTabs` across navigations. |
 | 3 | Does `MenuSection = "user"` actually work on JF 10.10/10.11, or do we need a different mechanism for per-user pages? | UI-002 agent | open — verify by deploying SendToKindle's `userConfigPage.html` (it already uses `"user"`) |
 
 If you (an agent) answer one of these, **come back and update the table and
