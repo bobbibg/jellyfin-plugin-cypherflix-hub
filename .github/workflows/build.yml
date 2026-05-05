@@ -130,21 +130,11 @@ jobs:
             done
           }
 
-          # Required: Meilisearch client + its transitive deps. Jellyfin host
-          # does not ship these — plugins load in their own AssemblyLoadContext.
-          stage_required "Meilisearch.dll" "Meilisearch"
-          # Common Meilisearch transitive deps (CSharpFunctionalExtensions etc.).
-          # We pattern-match liberally so future minor-bumps of Meilisearch don't
-          # break us — anything matching these names gets bundled.
-          stage_optional "CSharpFunctionalExtensions*.dll"
-          stage_optional "System.IdentityModel.Tokens.Jwt*.dll"
-          stage_optional "Microsoft.IdentityModel.*.dll"
-
-          # Newtonsoft.Json: required for the File Transformation plugin
-          # interop (JObject payload). Jellyfin host ships it, but bundling
-          # our own copy guarantees the right version is loaded into our
-          # AssemblyLoadContext. Optional in the publish-output sense — if
-          # publish strips it, we still ship.
+          # As of v1.0.0 the plugin is a thin C# shell + JS bundle: no Meilisearch,
+          # no provider clients, no transitive deps the Jellyfin host doesn't
+          # already provide. Newtonsoft.Json is needed for the File
+          # Transformation plugin interop, but the host ships it -- so it's
+          # optional and skipped if not present.
           stage_optional "Newtonsoft.Json.dll"
 
           echo "===== Staged files for zip ====="
