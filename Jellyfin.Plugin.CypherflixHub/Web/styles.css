@@ -1,57 +1,133 @@
-/*
- * Cypherflix Hub — shared SPA stylesheet.
- *
- * Served at /CypherflixHub/Web/styles.css by Api/WebController.cs and loaded
- * by bootstrap.js. Kept deliberately small — UI-003/004/005 add their own
- * page-specific rules under their own scoped selectors.
- *
- * Native tab styling: we deliberately reuse Jellyfin's `.emby-tab-button`
- * class on our buttons (see JELLYFIN-INTEGRATION.md §7.4), so we do NOT
- * override their visual style here. The only tab-related rule is making
- * sure our injected buttons sit in the same flex/inline flow as the
- * native ones, which they already do because we mount inside
- * `.emby-tabs-slider`.
- */
+/* Cypherflix Hub — slide-over panel + table styles. Inherits Jellyfin theme
+   variables where available, with sensible fallbacks. */
 
-/* ---------------------------------------------------------------- */
-/* Cypherflix view container                                        */
-/* ---------------------------------------------------------------- */
-/*
- * #cypherflixHubView is appended to `.mainAnimatedPages` by bootstrap.js
- * and toggled with the `hide` class (matching Jellyfin's own visibility
- * convention — see jellyfin-web src/components/viewContainer.js). It
- * provides the same baseline a native page gets so per-page modules
- * don't have to reinvent layout primitives.
- */
-.cypherflix-view {
-    display: block;
-    width: 100%;
-    box-sizing: border-box;
-    padding: 1.5em;
-    color: var(--jf-palette-text-primary, #fff);
-    background: var(--jf-palette-background-default, #101010);
+#cf-hub-panel.cf-panel {
+    position: fixed; inset: 0;
+    background: var(--theme-background-color, #101010);
+    color: var(--theme-primary-text-color, #fff);
+    z-index: 9999;
+    display: flex; flex-direction: column;
+    font-family: var(--theme-font-family, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
+}
+#cf-hub-panel.cf-hidden { display: none; }
+
+.cf-panel-header {
+    display: flex; align-items: center; gap: 1rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--card-bg-color, #1c1c1c);
+}
+.cf-panel-header h2 {
+    margin: 0;
+    color: var(--theme-primary-color, #00a4dc);
+    font-size: 1.25rem;
+}
+.cf-panel-body { padding: 1rem; overflow: auto; flex: 1; }
+
+.cf-tabs { display: flex; gap: 0.25rem; flex: 1; }
+.cf-tab {
+    background: transparent;
+    color: var(--theme-secondary-text-color, #999);
+    border: 1px solid transparent;
+    padding: 0.4rem 0.9rem;
+    cursor: pointer;
+    border-radius: 0.25rem;
+    font-size: 0.95rem;
+}
+.cf-tab:hover { color: var(--theme-primary-text-color, #fff); }
+.cf-tab.cf-tab-active {
+    color: var(--theme-primary-color, #00a4dc);
+    border-color: var(--theme-primary-color, #00a4dc);
 }
 
-.cypherflix-view.hide {
-    display: none;
+.cf-close {
+    background: transparent; color: var(--theme-primary-text-color, #fff);
+    border: none; cursor: pointer; font-size: 1.5rem; line-height: 1;
+    padding: 0 0.5rem;
+}
+.cf-close:hover { color: var(--theme-primary-color, #00a4dc); }
+
+.cf-toolbar {
+    display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
+    padding-bottom: 0.75rem;
+}
+.cf-status-msg {
+    color: var(--theme-secondary-text-color, #999);
+    font-size: 0.875rem;
+    margin-left: auto;
 }
 
-/* ---------------------------------------------------------------- */
-/* Reserved hooks for UI-003/004/005                                */
-/* ---------------------------------------------------------------- */
-/*
- * Page modules can rely on these scoping classes existing — they're empty
- * here on purpose so each page module owns its own visual rules without
- * needing a stylesheet update from this file.
- */
-.cypherflix-page {
-    /* page-level wrapper — reserved for UI-003/004/005 */
+.cf-btn {
+    background: var(--theme-primary-color, #00a4dc);
+    color: var(--theme-primary-text-color, #fff);
+    border: none;
+    padding: 0.5rem 0.875rem;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    font-size: 0.875rem;
+}
+.cf-btn:hover { background: var(--theme-accent-color, #aa5cc3); }
+.cf-btn-sm { padding: 0.25rem 0.5rem; font-size: 0.8rem; }
+.cf-actions { white-space: nowrap; }
+.cf-actions .cf-btn-sm + .cf-btn-sm { margin-left: 0.25rem; }
+
+.cf-filter {
+    background: var(--card-bg-color, #1c1c1c);
+    color: var(--theme-primary-text-color, #fff);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.25rem;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.875rem;
 }
 
-.cypherflix-page__header {
-    /* reserved */
+.cf-table-wrap { overflow: auto; }
+.cf-table {
+    width: 100%; border-collapse: collapse; font-size: 0.9rem;
 }
+.cf-table th, .cf-table td {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.cf-table th {
+    color: var(--theme-secondary-text-color, #999);
+    font-weight: 500;
+    background: rgba(0, 0, 0, 0.15);
+}
+.cf-table-sm th, .cf-table-sm td { padding: 0.25rem 0.5rem; font-size: 0.825rem; }
 
-.cypherflix-page__body {
-    /* reserved */
+.cf-pill {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    background: var(--card-bg-color, #1c1c1c);
+}
+.cf-pill-done       { background: rgba(34, 197, 94, 0.25); color: #65f797; }
+.cf-pill-failed     { background: rgba(239, 68, 68, 0.25); color: #ff8b8b; }
+.cf-pill-blocked    { background: rgba(239, 68, 68, 0.25); color: #ff8b8b; }
+.cf-pill-snatched, .cf-pill-downloading, .cf-pill-importing, .cf-pill-tagging
+    { background: rgba(59, 130, 246, 0.25); color: #8ab4ff; }
+.cf-pill-wanted     { background: rgba(234, 179, 8, 0.25); color: #f5d774; }
+.cf-pill-searching  { background: rgba(168, 85, 247, 0.2); color: #d3a3ff; }
+
+.cf-loading, .cf-empty, .cf-muted { color: var(--theme-secondary-text-color, #999); }
+.cf-error { color: #ff8b8b; }
+
+.cf-discover { display: grid; gap: 1rem; max-width: 60rem; margin: 0 auto; }
+.cf-card {
+    background: var(--card-bg-color, #1c1c1c);
+    border-radius: 0.5rem; padding: 1rem;
+}
+.cf-card h3 { margin: 0 0 0.5rem; color: var(--theme-primary-color, #00a4dc); }
+.cf-status-row { padding: 0.15rem 0; }
+.cf-list { list-style: none; padding-left: 0; margin: 0.25rem 0 0; }
+.cf-list li { padding: 0.15rem 0; }
+
+.cf-trigger { color: var(--theme-primary-text-color, #fff); }
+.cf-trigger .material-icons { font-size: 1.5rem; }
+
+@media (max-width: 720px) {
+    .cf-panel-header { flex-wrap: wrap; }
+    .cf-tabs { order: 2; flex-basis: 100%; }
 }

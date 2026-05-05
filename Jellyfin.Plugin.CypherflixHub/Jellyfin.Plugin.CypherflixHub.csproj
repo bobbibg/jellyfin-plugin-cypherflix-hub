@@ -3,9 +3,9 @@
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <RootNamespace>Jellyfin.Plugin.CypherflixHub</RootNamespace>
-    <AssemblyVersion>0.2.3.0</AssemblyVersion>
-    <FileVersion>0.2.3.0</FileVersion>
-    <Version>0.2.3</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Version>1.0.0</Version>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
@@ -20,13 +20,10 @@
     <PackageReference Include="Jellyfin.Model" Version="10.11.8">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Meilisearch" Version="0.15.4" />
     <!--
-      Newtonsoft.Json is required because the File Transformation plugin's
-      PluginInterface.RegisterTransformation accepts a Newtonsoft Newtonsoft.Json.Linq.JObject
-      (see JELLYFIN-INTEGRATION.md §2.2/§2.3). Excluded from runtime output: the
-      File Transformation plugin already loads Newtonsoft.Json into the Jellyfin
-      host, and shipping a duplicate would risk load-context conflicts.
+      Newtonsoft.Json: required because the File Transformation plugin's
+      PluginInterface.RegisterTransformation takes a Newtonsoft.Json.Linq.JObject.
+      Runtime asset excluded so we don't ship a duplicate alongside the host's copy.
     -->
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3">
       <PrivateAssets>all</PrivateAssets>

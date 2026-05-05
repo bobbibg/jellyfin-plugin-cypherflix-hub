@@ -9,8 +9,9 @@ using MediaBrowser.Model.Serialization;
 namespace Jellyfin.Plugin.CypherflixHub;
 
 /// <summary>
-/// Cypherflix Hub — unified search/discover/requests/calendar across the whole stack.
-/// See ARCHITECTURE.md for the full design.
+/// Cypherflix Hub — books + comics frontend for the cypherflix-grabber V2 backend.
+/// Thin C# shell: registers an admin config page, injects a JS bundle into the
+/// Jellyfin web UI, and reverse-proxies /Cypherflix/api/* to the grabber.
 /// </summary>
 public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
 {
@@ -27,9 +28,8 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     public override Guid Id => Guid.Parse("c1f1e571-7ba8-4d6a-9e2b-3a4f0c5d7e8b");
 
     public override string Description =>
-        "Unified search, discover, requests, and calendar across Jellyseerr, " +
-        "Readarr, and any future provider. Replaces the JF Enhanced " +
-        "Requests/Calendar tabs with multi-provider versions.";
+        "Books + comics UI for the cypherflix-grabber V2 backend. " +
+        "Adds Manage and Discover tabs for watchlists and requests.";
 
     public IEnumerable<PluginPageInfo> GetPages()
     {
@@ -40,8 +40,8 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
                 Name = "CypherflixHub",
                 EmbeddedResourcePath = $"{GetType().Namespace}.Configuration.configPage.html",
                 MenuSection = "server",
-                DisplayName = "Cypherflix Hub"
-            }
+                DisplayName = "Cypherflix Hub",
+            },
         };
     }
 }

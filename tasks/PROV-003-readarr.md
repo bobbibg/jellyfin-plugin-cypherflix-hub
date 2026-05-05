@@ -36,7 +36,7 @@ folder (books / audiobooks / comics) to control quality profiles independently.
 |---|---|---|---|---|---|
 | `url` | "URL" | `Url` | yes | `http://192.168.1.165:7650` | Internal LAN URL |
 | `api_key` | "API Key" | `ApiKey` | yes | — | Settings → General → API Key |
-| `media_type` | "Library media type" | `Select` | yes | `book` | Options: `book`, `audiobook`, `comic` — controls how `IndexDocument.MediaType` is set |
+| `media_type` | "Library media type" | `Select` | yes | `book` | Options: `book`, `audiobook`, `comic`, `manga` — controls how `IndexDocument.MediaType` is set. (`manga` maps to `MediaType.Comic` for now; revisit if Jellyfin gains a dedicated manga kind.) |
 | `root_folder` | "Root folder path" | `Text` | yes | `/library/books` | Used when adding new authors/books |
 | `quality_profile_id` | "Quality profile id" | `Number` | yes | `1` | From `GET /api/v1/qualityprofile` |
 | `metadata_profile_id` | "Metadata profile id" | `Number` | yes | `1` | From `GET /api/v1/metadataprofile` |
