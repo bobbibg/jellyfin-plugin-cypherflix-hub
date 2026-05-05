@@ -3,10 +3,30 @@
 // before forwarding to /api/v1/*).
 const BASE = '/Cypherflix/api';
 
+// Jellyfin's web client exposes window.ApiClient — its accessToken() is the
+// bearer that the [Authorize] attribute on our reverse-proxy controller checks.
+// Sent both as X-Emby-Token (Jellyfin's preferred header) and as a plain
+// Authorization: MediaBrowser Token=... so older clients keep working.
+function authHeaders() {
+    try {
+        const tok = window.ApiClient && typeof window.ApiClient.accessToken === 'function'
+            ? window.ApiClient.accessToken()
+            : null;
+        if (!tok) return {};
+        return {
+            'X-Emby-Token': tok,
+            'Authorization': 'MediaBrowser Token="' + tok + '"',
+        };
+    } catch (_) {
+        return {};
+    }
+}
+
 async function http(method, path, body) {
-    const opts = { method, credentials: 'same-origin' };
+    const headers = { ...authHeaders() };
+    const opts = { method, credentials: 'same-origin', headers };
     if (body !== undefined) {
-        opts.headers = { 'Content-Type': 'application/json' };
+        headers['Content-Type'] = 'application/json';
         opts.body = JSON.stringify(body);
     }
     const r = await fetch(BASE + path, opts);
