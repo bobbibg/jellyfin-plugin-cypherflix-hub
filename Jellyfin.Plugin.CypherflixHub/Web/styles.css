@@ -82,6 +82,73 @@
     margin-right: 0.75rem;
 }
 
+/* ----- Manage status badges --------------------------------------- */
+/* KefinTweaks ships .completion-badge (green) for "done"; we add the
+   other states using its visual language so the chip beside the title
+   reads consistently with native Watchlist styling. */
+.cypherflixPage .cf-status-badge {
+    color: #fff;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 8px;
+    border-radius: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: rgba(255, 255, 255, 0.15);
+}
+.cypherflixPage .cf-status-badge-wanted        { background: #eab308; color: #1c1c1c; }
+.cypherflixPage .cf-status-badge-searching     { background: #a855f7; }
+.cypherflixPage .cf-status-badge-snatched,
+.cypherflixPage .cf-status-badge-downloading,
+.cypherflixPage .cf-status-badge-importing,
+.cypherflixPage .cf-status-badge-tagging       { background: #3b82f6; }
+.cypherflixPage .cf-status-badge-failed,
+.cypherflixPage .cf-status-badge-blocked       { background: #ef4444; }
+
+/* Match the green-border treatment KefinTweaks uses for completed cards
+   but in red for failed/blocked requests. */
+.cypherflixPage .progress-card.cf-card-failed {
+    border-left: 4px solid #ef4444;
+    background: rgba(239, 68, 68, 0.05);
+}
+.cypherflixPage .progress-card.cf-card-failed:hover {
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.cypherflixPage .cf-page-title {
+    font-size: 24px;
+    font-weight: 600;
+    color: #fff;
+    margin: 0;
+}
+
+.cypherflixPage .cf-status-msg {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 13px;
+    margin: 0.5rem 1rem;
+    min-height: 1.4em;
+}
+
+.cypherflixPage .cf-status-reason {
+    color: #ff8b8b;
+}
+
+/* Native <select> needs a tiny tweak to match KefinTweaks's .sort-button
+   look — they apply the styling via class but native <select> ignores
+   some CSS, so we kill the default appearance. */
+.cypherflixPage select.sort-button {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    padding-right: 28px;
+    background-image:
+        linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.7) 50%),
+        linear-gradient(135deg, rgba(255,255,255,0.7) 50%, transparent 50%);
+    background-position: calc(100% - 14px) center, calc(100% - 9px) center;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+}
+
 /* Card poster — fall back to material icon when no cover_url is available.
    Keeps the slot occupied with the same dimensions KefinTweaks Watchlist's
    .progress-poster expects. */
