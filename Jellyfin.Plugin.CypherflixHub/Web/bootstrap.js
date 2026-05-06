@@ -118,27 +118,40 @@
                 parent.appendChild(node);
             }
             _missingContainersChecked = true;
-            // After backfilling, if the URL points at one of our tabs but
-            // Jellyfin's tab routing didn't activate it (because the
-            // container didn't exist when the page first loaded), simulate
-            // a click on the matching button so Jellyfin runs its normal
-            // is-active activation path.
-            const m = (window.location.hash || '').match(/[?&]tab=(\d+)/);
-            if (m) {
-                const wantIdx = parseInt(m[1], 10);
-                const wantedContainer = document.querySelector('[id^="customTab_"][data-index="' + wantIdx + '"]');
-                if (wantedContainer && !wantedContainer.classList.contains('is-active')) {
-                    const btn = document.querySelector('[is="emby-button"][data-index="' + wantIdx + '"]');
-                    if (btn && typeof btn.click === 'function') btn.click();
-                }
-            }
         } catch (_) { /* best-effort; observer will retry */ }
+    }
+
+    // After every render pass, if the URL points at one of our backfilled
+    // tabs but Jellyfin's tab-routing left it inactive (Jellyfin caches
+    // the tab list at page-load time, before our containers existed), we
+    // activate it manually: add is-active to ours, strip from siblings,
+    // sync the tab-strip button states. This mirrors what Jellyfin does
+    // internally for the tab it does know about.
+    function syncActiveCustomTab() {
+        const m = (window.location.hash || '').match(/[?&]tab=(\d+)/);
+        if (!m) return;
+        const wantIdx = parseInt(m[1], 10);
+        const wanted = document.querySelector('[id^="customTab_"][data-index="' + wantIdx + '"]');
+        if (!wanted) return;
+        if (wanted.classList.contains('is-active')) return;  // Jellyfin handled it.
+        // Deactivate every other tab pane in the same parent.
+        const parent = wanted.parentElement;
+        if (parent) {
+            parent.querySelectorAll('.tabContent').forEach((p) => p.classList.remove('is-active'));
+        }
+        wanted.classList.add('is-active');
+        // Sync top tab-strip buttons: deactivate others, activate ours.
+        document.querySelectorAll('.tabs-viewmenubar .emby-tab-button').forEach((b) => b.classList.remove('emby-tab-button-active'));
+        const btn = document.querySelector('.tabs-viewmenubar .emby-tab-button[data-index="' + wantIdx + '"]');
+        if (btn) btn.classList.add('emby-tab-button-active');
     }
 
     function tryRenderAll() {
         ensureStyles();
         // Best-effort backfill any missing customTab_<N> containers.
         void ensureCustomTabContainers();
+        // Activate our tab if the URL says so but Jellyfin didn't.
+        syncActiveCustomTab();
         for (const key of Object.keys(ANCHORS)) {
             const host = document.querySelector(ANCHORS[key].selector + ':not([data-cf-rendered="1"])');
             if (host) void renderInto(host, key);
