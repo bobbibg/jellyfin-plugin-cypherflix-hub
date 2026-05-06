@@ -118,6 +118,20 @@
                 parent.appendChild(node);
             }
             _missingContainersChecked = true;
+            // After backfilling, if the URL points at one of our tabs but
+            // Jellyfin's tab routing didn't activate it (because the
+            // container didn't exist when the page first loaded), simulate
+            // a click on the matching button so Jellyfin runs its normal
+            // is-active activation path.
+            const m = (window.location.hash || '').match(/[?&]tab=(\d+)/);
+            if (m) {
+                const wantIdx = parseInt(m[1], 10);
+                const wantedContainer = document.querySelector('[id^="customTab_"][data-index="' + wantIdx + '"]');
+                if (wantedContainer && !wantedContainer.classList.contains('is-active')) {
+                    const btn = document.querySelector('[is="emby-button"][data-index="' + wantIdx + '"]');
+                    if (btn && typeof btn.click === 'function') btn.click();
+                }
+            }
         } catch (_) { /* best-effort; observer will retry */ }
     }
 
