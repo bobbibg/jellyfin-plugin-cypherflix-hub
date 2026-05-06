@@ -5,7 +5,11 @@
    typography from Jellyfin's CSS variables so a theme switch flows through. */
 
 .cypherflixPage {
-    /* Match Jellyfin's other .page elements — no custom positioning. */
+    /* Lift above Jellyfin's .backgroundContainer (position:fixed inset:0 with
+       z-index:auto) — without this our content renders in DOM but is covered
+       by the backdrop layer. */
+    position: relative;
+    z-index: 1;
     color: inherit;
 }
 
