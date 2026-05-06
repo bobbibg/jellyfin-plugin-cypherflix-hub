@@ -65,17 +65,12 @@ function renderCard(r, isAdmin) {
     if (r.series_year)  meta.push('<span class="movie-year">' + escapeHtml(String(r.series_year)) + '</span>');
     if (r.release_date) meta.push('<span class="movie-runtime"><span class="material-icons">event</span>' + escapeHtml(fmtDate(r.release_date)) + '</span>');
 
-    // Subtitle — issue title or book title where it differs from series.
     const subtitleLine = r.title && r.title !== r.series_name
         ? '<div class="cf-card-subtitle">' + escapeHtml(r.title) + '</div>'
         : '';
-
-    // Description: show summary when present (especially valuable for
-    // wanted items that don't have covers yet).
     const summary = r.summary
         ? '<div class="cf-card-summary">' + escapeHtml(r.summary.slice(0, 220)) + (r.summary.length > 220 ? '…' : '') + '</div>'
         : '';
-
     const reasonLine = r.status_reason
         ? '<div class="cf-card-reason">' + escapeHtml(r.status_reason) + '</div>'
         : '';
@@ -87,9 +82,11 @@ function renderCard(r, isAdmin) {
             <button class="movie-action-btn cf-regrab"       title="Re-grab"><span class="material-icons">file_download</span></button>
         </div>` : '';
 
+    // The cf-needs-cover marker is what the lazy-cover loader looks for
+    // post-render — items without a cached cover get one fetched on-demand.
     const poster = r.cover_url
         ? '<img src="' + escapeHtml(r.cover_url) + '" alt="" loading="lazy" />'
-        : '<div class="movie-poster-placeholder"><span class="material-icons">' + kindIcon(r.kind) + '</span></div>';
+        : '<div class="movie-poster-placeholder cf-needs-cover" data-request-id="' + r.id + '"><span class="material-icons">' + kindIcon(r.kind) + '</span></div>';
 
     return `
         <div class="movie-card cf-card cf-card-${r.kind} cf-card-status-${r.status}" data-id="${r.id}">
@@ -98,14 +95,53 @@ function renderCard(r, isAdmin) {
                 <div class="movie-poster-overlay">${statusOverlay(r.status)}</div>
             </div>
             <div class="movie-details">
-                <h3 class="movie-title">${escapeHtml(primaryTitle(r))}</h3>
-                ${subtitleLine}
-                <div class="movie-meta">${meta.join('')}</div>
-                ${summary}
-                ${reasonLine}
+                <div class="cf-card-body">
+                    <h3 class="movie-title">${escapeHtml(primaryTitle(r))}</h3>
+                    ${subtitleLine}
+                    <div class="movie-meta">${meta.join('')}</div>
+                    ${summary}
+                    ${reasonLine}
+                </div>
                 ${adminActions}
             </div>
         </div>`;
+}
+
+function skeletonGrid(count) {
+    const card = `
+        <div class="cf-skeleton-card">
+            <div class="cf-skeleton-poster"></div>
+            <div class="cf-skeleton-line line-title"></div>
+            <div class="cf-skeleton-line line-sub"></div>
+            <div class="cf-skeleton-line line-meta"></div>
+        </div>`;
+    return '<div class="cf-skeleton-grid">' + Array(count).fill(card).join('') + '</div>';
+}
+
+// Lazy-fetch covers for cards that don't have one yet. Sequential to
+// avoid hammering ComicVine/Hardcover; SafeClient on the backend rate-
+// limits anyway. Aborts the in-flight chain when the user navigates away.
+async function fillMissingCovers(host, abortSignal) {
+    const placeholders = host.querySelectorAll('.movie-poster-placeholder.cf-needs-cover[data-request-id]');
+    for (const ph of placeholders) {
+        if (abortSignal && abortSignal.aborted) return;
+        const id = parseInt(ph.dataset.request_id || ph.dataset.requestId, 10);
+        if (!Number.isFinite(id)) continue;
+        try {
+            const data = await api.getRequestCover(id);
+            if (abortSignal && abortSignal.aborted) return;
+            const url = data && data.cover_url;
+            if (!url) continue;
+            const img = document.createElement('img');
+            img.alt = '';
+            img.loading = 'lazy';
+            img.className = 'cf-cover-loading';
+            img.src = url;
+            img.onload = () => img.classList.replace('cf-cover-loading', 'cf-cover-loaded');
+            // Replace the placeholder with the real image.
+            ph.replaceWith(img);
+        } catch (_) { /* leave placeholder */ }
+    }
 }
 
 function renderEmpty(msg) {
@@ -118,7 +154,7 @@ function renderEmpty(msg) {
 }
 
 function renderLoading() {
-    return '<div class="movie-history-empty-message"><div class="empty-message-icon"><span class="material-icons">hourglass_top</span></div><p class="empty-message-subtitle">Loading…</p></div>';
+    return skeletonGrid(PAGE_SIZE);
 }
 
 function renderError(err) {
@@ -168,6 +204,8 @@ export async function render(root) {
     let searchTerm = '';
     let currentPage = 1;
     let allItems = [];
+    // AbortController so navigating away cancels in-flight cover fetches.
+    let coverAbort = new AbortController();
 
     root.classList.add('cf-host');
     root.innerHTML = `
@@ -242,6 +280,12 @@ export async function render(root) {
             : renderEmpty(searchTerm ? 'No matches for that search.' : null);
         pagTop.innerHTML    = renderPagination(currentPage, totalPages, 'top');
         pagBottom.innerHTML = renderPagination(currentPage, totalPages, 'bottom');
+
+        // Kick off lazy cover loading for the cards just rendered. Cancel
+        // any prior chain so paginating doesn't pile up requests.
+        coverAbort.abort();
+        coverAbort = new AbortController();
+        void fillMissingCovers(list, coverAbort.signal);
     }
 
     async function refresh() {

@@ -63,10 +63,12 @@ function renderCard(item) {
                 <div class="movie-poster-overlay"></div>
             </div>
             <div class="movie-details">
-                <h3 class="movie-title">${escapeHtml(title)}</h3>
-                ${subtitle || author}
-                <div class="movie-meta">${meta.join('')}</div>
-                ${summary}
+                <div class="cf-card-body">
+                    <h3 class="movie-title">${escapeHtml(title)}</h3>
+                    ${subtitle || author}
+                    <div class="movie-meta">${meta.join('')}</div>
+                    ${summary}
+                </div>
                 <div class="movie-actions">
                     <button class="movie-action-btn cf-request-btn">
                         <span class="material-icons">add</span>
@@ -77,12 +79,23 @@ function renderCard(item) {
         </div>`;
 }
 
+function skeletonGrid(count) {
+    const card = `
+        <div class="cf-skeleton-card">
+            <div class="cf-skeleton-poster"></div>
+            <div class="cf-skeleton-line line-title"></div>
+            <div class="cf-skeleton-line line-sub"></div>
+            <div class="cf-skeleton-line line-meta"></div>
+        </div>`;
+    return '<div class="cf-skeleton-grid">' + Array(count).fill(card).join('') + '</div>';
+}
+
 function renderEmpty(msg) {
     return '<div class="movie-history-empty-message"><div class="empty-message-icon"><span class="material-icons">explore</span></div><h3 class="empty-message-title">Nothing to show</h3><p class="empty-message-subtitle">' + escapeHtml(msg || '') + '</p></div>';
 }
 
-function renderLoading(msg) {
-    return '<div class="movie-history-empty-message"><div class="empty-message-icon"><span class="material-icons">hourglass_top</span></div><p class="empty-message-subtitle">' + escapeHtml(msg || 'Loading…') + '</p></div>';
+function renderLoading(_msg) {
+    return skeletonGrid(PAGE_SIZE);
 }
 
 function renderError(err) {
@@ -207,6 +220,11 @@ async function renderTrending(host, msg) {
             ${SHELL}
         </div>`;
 
+    // Seed both grids with skeletons immediately so the page doesn't
+    // render as a hollow shell during the network round-trip.
+    host.querySelector('[data-row="books"]  .cf-grid').innerHTML = skeletonGrid(8);
+    host.querySelector('[data-row="comics"] .cf-grid').innerHTML = skeletonGrid(8);
+
     try {
         const [books, comics] = await Promise.all([
             api.discoverTrending('book', 30).catch(() => ({ items: [] })),
@@ -218,6 +236,12 @@ async function renderTrending(host, msg) {
         host.querySelector('.cf-stats-comics').textContent = cItems.length + ' comics';
         setupPaginatedGrid(host.querySelector('[data-row="books"]'),  bItems,  msg);
         setupPaginatedGrid(host.querySelector('[data-row="comics"]'), cItems, msg);
+        // Surface a hint when Hardcover isn't returning anything — usually
+        // means HARDCOVER_API_TOKEN isn't set on the grabber container.
+        if (!bItems.length) {
+            const grid = host.querySelector('[data-row="books"] .cf-grid');
+            grid.innerHTML = renderEmpty('No books from Hardcover. Set HARDCOVER_API_TOKEN on the grabber container — get a free token at hardcover.app/account/api.');
+        }
     } catch (err) {
         host.innerHTML = renderError(err);
     }
@@ -233,6 +257,7 @@ async function renderComingSoon(host, msg) {
             </div>
         </div>
         ${SHELL}`;
+    host.querySelector('.cf-grid').innerHTML = skeletonGrid(8);
     try {
         const data = await api.discoverComingSoon(60);
         const items = data.items || [];

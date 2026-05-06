@@ -90,6 +90,7 @@ export const api = {
         return http('GET', '/requests' + (qs ? '?' + qs : ''));
     },
     getRequest:       (id)                            => http('GET',  '/requests/' + id),
+    getRequestCover:  (id)                            => http('GET',  '/requests/' + id + '/cover'),
     retryRequest:     (id)                            => http('POST', '/requests/' + id + '/retry'),
     refreshMetadata:  (id)                            => http('POST', '/requests/' + id + '/refresh-metadata'),
     regrabRequest:    (id)                            => http('POST', '/requests/' + id + '/regrab'),
