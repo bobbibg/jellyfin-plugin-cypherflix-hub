@@ -1,10 +1,13 @@
 // Manage view — visually matched to the KefinTweaks Watchlist plugin.
 // Reuses its .watchlist-tabs / .progress-card / .progress-poster /
 // .progress-details / .progress-actions class names so its CSS styles
-// our elements automatically. Backend cover URLs land in v1.3.x — for
-// now the poster is a material-icon fallback.
-import { api } from './api.js';
-import { isCurrentUserAdmin } from './user.js';
+// our elements automatically.
+//
+// Imports happen INSIDE render() with a cache-buster so we never get
+// stuck on a stale cached api.js after a plugin upgrade — Cache-Control
+// alone doesn't evict the ES-module-graph cache when URLs are stable.
+let api;
+let isCurrentUserAdmin;
 
 // Status sub-tab grouping — collapses the nine raw DB states into the
 // five buckets users actually care about. The "In progress" group covers
@@ -86,6 +89,9 @@ function renderCard(r, isAdmin) {
 }
 
 export async function render(root) {
+    const cb = '?cb=' + Date.now();
+    ({ api } = await import('./api.js' + cb));
+    ({ isCurrentUserAdmin } = await import('./user.js' + cb));
     const isAdmin = await isCurrentUserAdmin();
 
     // Wrap in a sibling-of-watchlist .sections div so KefinTweaks-scoped

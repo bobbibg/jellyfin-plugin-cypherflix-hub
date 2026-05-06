@@ -5,7 +5,10 @@
 // render <img> when present and a material-icon fallback otherwise.
 // Each card has a Request CTA that POSTs the pre-baked watchlist_payload
 // to /api/v1/watchlist.
-import { api } from './api.js';
+//
+// api.js is imported dynamically inside render() with a cache-buster so
+// plugin upgrades evict the stale module instance reliably.
+let api;
 
 const SUB_TABS = [
     { id: 'trending',    label: 'Trending'    },
@@ -229,6 +232,7 @@ function renderItemsInto(el, items) {
 // ----- entry point -----------------------------------------------------
 
 export async function render(root) {
+    ({ api } = await import('./api.js?cb=' + Date.now()));
     root.innerHTML = `
         <div class="padded-left padded-right padded-top">
             <h1 class="sectionTitle">Discover</h1>
