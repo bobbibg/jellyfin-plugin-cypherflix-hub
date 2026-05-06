@@ -35,9 +35,14 @@ function renderCard(item) {
     if (item.series_name) titleParts.push(item.series_name);
     if (item.issue_number) titleParts.push('#' + item.issue_number);
     const title = titleParts.join(' ') || item.title || '(untitled)';
-    const subtitle = item.title && item.title !== item.series_name
-        ? '<div class="cf-card-subtitle">' + escapeHtml(item.title) + '</div>'
-        : '';
+
+    // Subtitle is the author when known. Falls back to the alt-title only
+    // when no author info is available (rare for books, common for comics).
+    const subtitle = item.authors
+        ? '<div class="cf-card-subtitle">' + escapeHtml(item.authors) + '</div>'
+        : (item.title && item.title !== item.series_name
+            ? '<div class="cf-card-subtitle">' + escapeHtml(item.title) + '</div>'
+            : '');
 
     const meta = [];
     if (item.year)         meta.push('<span class="movie-year">' + escapeHtml(String(item.year)) + '</span>');
@@ -45,9 +50,6 @@ function renderCard(item) {
 
     const summary = item.summary
         ? '<div class="cf-card-summary">' + escapeHtml(item.summary.slice(0, 160)) + (item.summary.length > 160 ? '…' : '') + '</div>'
-        : '';
-    const author = item.authors
-        ? '<div class="cf-card-subtitle">' + escapeHtml(item.authors) + '</div>'
         : '';
 
     const poster = item.cover_url
@@ -65,7 +67,7 @@ function renderCard(item) {
             <div class="movie-details">
                 <div class="cf-card-body">
                     <h3 class="movie-title">${escapeHtml(title)}</h3>
-                    ${subtitle || author}
+                    ${subtitle}
                     <div class="movie-meta">${meta.join('')}</div>
                     ${summary}
                 </div>

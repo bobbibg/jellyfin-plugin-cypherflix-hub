@@ -65,9 +65,14 @@ function renderCard(r, isAdmin) {
     if (r.series_year)  meta.push('<span class="movie-year">' + escapeHtml(String(r.series_year)) + '</span>');
     if (r.release_date) meta.push('<span class="movie-runtime"><span class="material-icons">event</span>' + escapeHtml(fmtDate(r.release_date)) + '</span>');
 
-    const subtitleLine = r.title && r.title !== r.series_name
-        ? '<div class="cf-card-subtitle">' + escapeHtml(r.title) + '</div>'
-        : '';
+    // Subtitle is the author when known. Falls back to the issue/book
+    // title when authors aren't on the row (common for comics where the
+    // ComicVine response we ingest doesn't always include credits).
+    const subtitleLine = r.authors
+        ? '<div class="cf-card-subtitle">' + escapeHtml(r.authors) + '</div>'
+        : (r.title && r.title !== r.series_name
+            ? '<div class="cf-card-subtitle">' + escapeHtml(r.title) + '</div>'
+            : '');
     const summary = r.summary
         ? '<div class="cf-card-summary">' + escapeHtml(r.summary.slice(0, 220)) + (r.summary.length > 220 ? '…' : '') + '</div>'
         : '';
