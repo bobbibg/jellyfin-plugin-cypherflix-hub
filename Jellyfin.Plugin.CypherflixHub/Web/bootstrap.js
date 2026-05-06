@@ -42,7 +42,13 @@
     }
 
     function mountUserDrawerLinks() {
-        const host = document.getElementById('pluginMenuOptions');
+        // pluginMenuOptions is a class on the drawer's plugin section (where
+        // links like "Modular Home" live). Other Jellyfin plugins use it the
+        // same way. Falls back to libraryMenuOptions if the plugin section
+        // isn't rendered yet — better visible than missing.
+        const host =
+            document.querySelector('.pluginMenuOptions') ||
+            document.querySelector('.libraryMenuOptions');
         if (!host) return false;
         if (host.querySelector('[data-cf-nav]')) return true;
         host.appendChild(navLink('#/cypherflix/discover', 'auto_stories', 'Discover'));
