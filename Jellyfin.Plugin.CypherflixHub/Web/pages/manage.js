@@ -1,7 +1,8 @@
 // Manage view — list of requests with status filter and per-row actions.
-// Renders into a routed page using Jellyfin's own classes (.detailTable,
-// .raised, .button-flat, .selectContainer). Actions column hides for
-// non-admin users.
+// Renders as a Jellyfin-native paperList of listItems (the same pattern
+// Jellyfin uses for track lists, episode lists, etc.). Actions appear in
+// .listItemAside on the right; for non-admin users the actions cluster
+// (and the Trigger Sweep button) hide entirely.
 import { api } from './api.js';
 import { isCurrentUserAdmin } from './user.js';
 
@@ -13,31 +14,40 @@ const KINDS = [
     { value: 'audiobook', label: 'Audiobooks' },
 ];
 
-function statusPill(s) {
-    return '<span class="cf-pill cf-pill-' + s + '">' + s + '</span>';
-}
-function fmtDate(s) {
-    if (!s) return '';
-    try { return new Date(s).toLocaleDateString(); } catch (_) { return s; }
-}
-function rowTitle(r) {
-    const parts = [];
-    if (r.issue_number) parts.push('#' + r.issue_number);
-    if (r.title) parts.push(r.title);
-    return parts.join(' — ');
-}
-
 function escapeHtml(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
         ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])
     );
 }
 
+function statusPill(s) {
+    return '<span class="cf-pill cf-pill-' + s + '">' + s + '</span>';
+}
+
+function fmtDate(s) {
+    if (!s) return '';
+    try { return new Date(s).toLocaleDateString(); } catch (_) { return s; }
+}
+
+// "Series Name #129 — Issue Title" / "Author — Book Title" — collapses null
+// fields cleanly so we never render dangling separators.
+function primaryLine(r) {
+    return r.series_name || r.title || '(untitled)';
+}
+function secondaryLine(r) {
+    const parts = [];
+    if (r.issue_number) parts.push('#' + r.issue_number);
+    if (r.title && r.title !== r.series_name) parts.push(r.title);
+    if (r.series_year) parts.push(String(r.series_year));
+    if (r.release_date) parts.push(fmtDate(r.release_date));
+    return parts.join(' · ');
+}
+
 export async function render(root) {
     const isAdmin = await isCurrentUserAdmin();
 
-    // Use Jellyfin's .padded-* + .sectionTitle conventions so the layout
-    // matches every other native page.
+    // Top-level layout uses Jellyfin's standard padded-* page conventions.
+    // Toolbar selects + buttons are emby-* custom elements styled by Jellyfin.
     root.innerHTML = `
         <div class="padded-left padded-right padded-top">
             <h1 class="sectionTitle">Cypherflix Manage</h1>
@@ -68,73 +78,67 @@ export async function render(root) {
                 <span class="cf-status-msg"></span>
             </div>
 
-            <div class="detailTable-wrapper">
-                <table class="detailTable cf-table-requests">
-                    <thead>
-                        <tr>
-                            <th class="detailTableHeaderCell">Series</th>
-                            <th class="detailTableHeaderCell">Issue / Title</th>
-                            <th class="detailTableHeaderCell">Year</th>
-                            <th class="detailTableHeaderCell">Released</th>
-                            <th class="detailTableHeaderCell">Status</th>
-                            <th class="detailTableHeaderCell">Progress</th>
-                            ${isAdmin ? '<th class="detailTableHeaderCell">Actions</th>' : ''}
-                        </tr>
-                    </thead>
-                    <tbody class="cf-rows">
-                        <tr><td colspan="${isAdmin ? 7 : 6}" class="detailTableBodyCell cf-loading">Loading…</td></tr>
-                    </tbody>
-                </table>
+            <div class="paperList cf-rows">
+                <div class="listItem cf-loading">Loading…</div>
             </div>
         </div>`;
 
     const $ = (sel) => root.querySelector(sel);
-    const tbody = $('.cf-rows');
+    const list = $('.cf-rows');
     const statusFilter = $('.cf-status');
     const kindFilter = $('.cf-kind');
     const msg = $('.cf-status-msg');
     statusFilter.value = 'wanted';
 
+    // Each request renders as a Jellyfin-native .listItem. The icon button
+    // pattern (paper-icon-button-light + emby-button) matches the action
+    // buttons used on item-detail pages (e.g. play / mark-watched).
+    function renderRow(r) {
+        const adminActions = isAdmin ? `
+            <div class="listItem-aside cf-actions">
+                <button is="paper-icon-button-light" type="button" class="paper-icon-button-light emby-button cf-retry"        title="Retry"><span class="material-icons" aria-hidden="true">replay</span></button>
+                <button is="paper-icon-button-light" type="button" class="paper-icon-button-light emby-button cf-refresh-meta" title="Refresh metadata"><span class="material-icons" aria-hidden="true">cloud_sync</span></button>
+                <button is="paper-icon-button-light" type="button" class="paper-icon-button-light emby-button cf-regrab"      title="Re-grab"><span class="material-icons" aria-hidden="true">file_download</span></button>
+            </div>` : '';
+        const progressLine = r.progress_pct == null ? '' :
+            '<div class="listItemBodyText secondary">Progress: ' + Math.round(r.progress_pct) + '%</div>';
+        return `
+            <div class="listItem listItem-border" data-id="${r.id}">
+                <div class="listItemBody two-line">
+                    <div class="listItemBodyText">${escapeHtml(primaryLine(r))}</div>
+                    <div class="listItemBodyText secondary">${escapeHtml(secondaryLine(r))}</div>
+                    ${progressLine}
+                </div>
+                <div class="listItem-aside cf-status-cell">${statusPill(r.status)}</div>
+                ${adminActions}
+            </div>`;
+    }
+
     async function refresh() {
         msg.textContent = '';
-        const cols = isAdmin ? 7 : 6;
-        tbody.innerHTML = `<tr><td colspan="${cols}" class="detailTableBodyCell cf-loading">Loading…</td></tr>`;
+        list.innerHTML = '<div class="listItem cf-loading">Loading…</div>';
         try {
             const params = { limit: 200 };
             if (statusFilter.value) params.status = statusFilter.value;
-            if (kindFilter.value) params.kind = kindFilter.value;
+            if (kindFilter.value)   params.kind   = kindFilter.value;
             const data = await api.listRequests(params);
             if (!data.items.length) {
-                tbody.innerHTML = `<tr><td colspan="${cols}" class="detailTableBodyCell cf-empty">No requests in this state.</td></tr>`;
+                list.innerHTML = '<div class="listItem cf-empty">No requests in this state.</div>';
                 return;
             }
-            tbody.innerHTML = data.items.map(r => `
-                <tr data-id="${r.id}">
-                    <td class="detailTableBodyCell">${escapeHtml(r.series_name || '')}</td>
-                    <td class="detailTableBodyCell">${escapeHtml(rowTitle(r))}</td>
-                    <td class="detailTableBodyCell">${r.series_year == null ? '' : r.series_year}</td>
-                    <td class="detailTableBodyCell">${fmtDate(r.release_date)}</td>
-                    <td class="detailTableBodyCell">${statusPill(r.status)}</td>
-                    <td class="detailTableBodyCell">${r.progress_pct == null ? '' : Math.round(r.progress_pct) + '%'}</td>
-                    ${isAdmin ? `
-                    <td class="detailTableBodyCell cf-actions">
-                        <button is="emby-button" type="button" class="raised button-flat button-flat-mini cf-retry" title="Retry"><span class="material-icons" aria-hidden="true">replay</span></button>
-                        <button is="emby-button" type="button" class="raised button-flat button-flat-mini cf-refresh-meta" title="Refresh metadata"><span class="material-icons" aria-hidden="true">cloud_sync</span></button>
-                        <button is="emby-button" type="button" class="raised button-flat button-flat-mini cf-regrab" title="Re-grab"><span class="material-icons" aria-hidden="true">file_download</span></button>
-                    </td>` : ''}
-                </tr>`).join('');
+            list.innerHTML = data.items.map(renderRow).join('');
         } catch (err) {
-            tbody.innerHTML = `<tr><td colspan="${cols}" class="detailTableBodyCell cf-error">Error: ${escapeHtml(err.message)}</td></tr>`;
+            list.innerHTML = '<div class="listItem cf-error">Error: ' + escapeHtml(err.message) + '</div>';
         }
     }
 
     if (isAdmin) {
-        tbody.addEventListener('click', async (e) => {
+        list.addEventListener('click', async (e) => {
             const btn = e.target.closest('button');
             if (!btn) return;
-            const tr = btn.closest('tr');
-            if (!tr) return;
-            const id = parseInt(tr.dataset.id, 10);
+            const item = btn.closest('.listItem[data-id]');
+            if (!item) return;
+            const id = parseInt(item.dataset.id, 10);
             try {
                 if (btn.classList.contains('cf-retry')) {
                     await api.retryRequest(id);
