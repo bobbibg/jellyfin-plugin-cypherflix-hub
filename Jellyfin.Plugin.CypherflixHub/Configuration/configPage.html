@@ -7,16 +7,37 @@
 <div id="cypherflixHubConfigurationPage" data-role="page" class="page type-interior pluginConfigurationPage" data-controller="__plugin/cypherflixHubConfigurationPage">
     <div data-role="content">
         <div class="content-primary">
-            <div class="paperList">
-                <a is="emby-linkbutton" class="raised block button-submit" href="#/cypherflix/manage">
-                    <span class="material-icons" aria-hidden="true">fact_check</span>
-                    <span>Open Cypherflix Manage</span>
-                </a>
-                <a is="emby-linkbutton" class="raised block" href="#/cypherflix/discover" style="margin-top: 0.4em;">
-                    <span class="material-icons" aria-hidden="true">auto_stories</span>
-                    <span>Open Cypherflix Discover</span>
-                </a>
+            <h2>Setup</h2>
+            <div class="fieldDescription" style="margin-bottom: 1em;">
+                Cypherflix Hub renders Discover and Manage views into anchor
+                <code>&lt;div&gt;</code>s hosted by the
+                <strong>Custom Tabs</strong> plugin. Sidenav links are added via
+                the <strong>KefinTweaks</strong> plugin's Custom Menu Links
+                feature. Configure those plugins as below; this plugin will
+                detect the anchor divs and render content into them.
             </div>
+            <ol class="paperList" style="margin-bottom: 1.5em;">
+                <li style="padding: 0.4em 0;">
+                    Open <strong>Dashboard → Plugins → Custom Tabs</strong>
+                    and add two tabs:
+                    <ul>
+                        <li>Title <em>Discover</em>, Body
+                            <code>&lt;div class="sections cypherflix-discover"&gt;&lt;/div&gt;</code></li>
+                        <li>Title <em>Manage</em>, Body
+                            <code>&lt;div class="sections cypherflix-manage"&gt;&lt;/div&gt;</code></li>
+                    </ul>
+                </li>
+                <li style="padding: 0.4em 0;">
+                    Open <strong>KefinTweaks → Custom Menu Links</strong> and add
+                    drawer entries pointing at <code>#/home?tab=N</code> for the
+                    indexes Custom Tabs assigned (Home is 0, Favourites is 1,
+                    your custom tabs are 2 and onward).
+                </li>
+                <li style="padding: 0.4em 0;">
+                    Save. Refresh the home page. Discover and Manage will
+                    render inside their respective tabs.
+                </li>
+            </ol>
             <h2 style="margin-top: 1.5em;">Settings</h2>
             <form id="cypherflixHubConfigurationForm">
                 <div class="inputContainer">

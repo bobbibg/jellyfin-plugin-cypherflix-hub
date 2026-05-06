@@ -1,8 +1,7 @@
-// Discover view — visually parallels KefinTweaks Watchlist > Movie History.
-// Three sub-tabs (Trending / Coming Soon / Search). Each renders a
-// .movie-history-grid of .movie-card cells driven by the new backend
-// /api/v1/discover/* endpoints. Cards carry a Request CTA that POSTs the
-// pre-baked watchlist_payload to /api/v1/watchlist.
+// Discover view — Seer-style browse over books + comics. Renders into a
+// Custom Tab anchor div (.sections.cypherflix-discover). 3 sub-tabs:
+// Trending / Coming Soon / Search.
+
 let api;
 
 const SUB_TABS = [
@@ -31,23 +30,24 @@ function kindIcon(kind) {
     return 'collections_bookmark';
 }
 
-// ----- card rendering --------------------------------------------------
-
 function renderCard(item) {
     const titleParts = [];
     if (item.series_name) titleParts.push(item.series_name);
     if (item.issue_number) titleParts.push('#' + item.issue_number);
     const title = titleParts.join(' ') || item.title || '(untitled)';
+    const subtitle = item.title && item.title !== item.series_name
+        ? '<div class="cf-card-subtitle">' + escapeHtml(item.title) + '</div>'
+        : '';
 
     const meta = [];
     if (item.year)         meta.push('<span class="movie-year">' + escapeHtml(String(item.year)) + '</span>');
     if (item.release_date) meta.push('<span class="movie-runtime"><span class="material-icons">event</span>' + escapeHtml(fmtDate(item.release_date)) + '</span>');
 
     const summary = item.summary
-        ? '<div class="movie-watched-date">' + escapeHtml(item.summary.slice(0, 160)) + (item.summary.length > 160 ? '…' : '') + '</div>'
+        ? '<div class="cf-card-summary">' + escapeHtml(item.summary.slice(0, 160)) + (item.summary.length > 160 ? '…' : '') + '</div>'
         : '';
     const author = item.authors
-        ? '<div class="movie-watched-date">' + escapeHtml(item.authors) + '</div>'
+        ? '<div class="cf-card-subtitle">' + escapeHtml(item.authors) + '</div>'
         : '';
 
     const poster = item.cover_url
@@ -55,17 +55,17 @@ function renderCard(item) {
         : '<div class="movie-poster-placeholder"><span class="material-icons">' + kindIcon(item.kind) + '</span></div>';
 
     return `
-        <div class="movie-card cf-discover-card"
+        <div class="movie-card cf-card cf-card-${item.kind} cf-discover-card"
              data-source="${escapeHtml(item.source)}"
              data-source-id="${escapeHtml(item.source_id)}">
-            <div class="movie-poster">
+            <div class="movie-poster cf-portrait-poster">
                 ${poster}
                 <div class="movie-poster-overlay"></div>
             </div>
             <div class="movie-details">
                 <h3 class="movie-title">${escapeHtml(title)}</h3>
+                ${subtitle || author}
                 <div class="movie-meta">${meta.join('')}</div>
-                ${author}
                 ${summary}
                 <div class="movie-actions">
                     <button class="movie-action-btn cf-request-btn">
@@ -78,12 +78,7 @@ function renderCard(item) {
 }
 
 function renderEmpty(msg) {
-    return `
-        <div class="movie-history-empty-message">
-            <div class="empty-message-icon"><span class="material-icons">explore</span></div>
-            <h3 class="empty-message-title">Nothing to show</h3>
-            <p class="empty-message-subtitle">${escapeHtml(msg || '')}</p>
-        </div>`;
+    return '<div class="movie-history-empty-message"><div class="empty-message-icon"><span class="material-icons">explore</span></div><h3 class="empty-message-title">Nothing to show</h3><p class="empty-message-subtitle">' + escapeHtml(msg || '') + '</p></div>';
 }
 
 function renderLoading(msg) {
@@ -126,8 +121,6 @@ function renderPagination(page, totalPages, position) {
         </div>`;
 }
 
-// ----- request CTA ----------------------------------------------------
-
 async function handleRequest(card, msg) {
     const item = JSON.parse(card.dataset.payload || '{}');
     if (!item.watchlist_payload) {
@@ -149,29 +142,24 @@ async function handleRequest(card, msg) {
     }
 }
 
-// ----- shared paginated grid ------------------------------------------
-
 function setupPaginatedGrid(host, items, msg) {
     let page = 1;
     const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
-    const grid = host.querySelector('.cf-grid');
-    const pagTop = host.querySelector('.cf-pagination-top');
-    const pagBottom = host.querySelector('.cf-pagination-bottom');
+    const grid     = host.querySelector('.cf-grid');
+    const pagTop   = host.querySelector('.cf-pagination-top');
+    const pagBot   = host.querySelector('.cf-pagination-bottom');
 
     function paint() {
         const slice = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-        grid.innerHTML = slice.length
-            ? slice.map(renderCard).join('')
-            : renderEmpty('Nothing here yet.');
-        // Stash full item on each card for the request CTA.
+        grid.innerHTML = slice.length ? slice.map(renderCard).join('') : renderEmpty('Nothing here yet.');
         grid.querySelectorAll('.movie-card[data-source-id]').forEach((card, i) => {
             try { card.dataset.payload = JSON.stringify(slice[i]); } catch (_) {}
         });
-        pagTop.innerHTML    = renderPagination(page, totalPages, 'top');
-        pagBottom.innerHTML = renderPagination(page, totalPages, 'bottom');
+        pagTop.innerHTML = renderPagination(page, totalPages, 'top');
+        pagBot.innerHTML = renderPagination(page, totalPages, 'bottom');
     }
 
-    [pagTop, pagBottom].forEach((p) => {
+    [pagTop, pagBot].forEach((p) => {
         p.addEventListener('click', (e) => {
             const btn = e.target.closest('button.pagination-btn');
             if (!btn || btn.classList.contains('disabled') || btn.classList.contains('active')) return;
@@ -193,12 +181,10 @@ function setupPaginatedGrid(host, items, msg) {
     paint();
 }
 
-// ----- tab content renderers ------------------------------------------
-
 const SHELL = `
     <div class="cf-pagination-top"></div>
     <div class="paginated-container">
-        <div class="movie-history-grid cf-grid"></div>
+        <div class="movie-history-grid cf-card-grid cf-grid"></div>
     </div>
     <div class="cf-pagination-bottom"></div>`;
 
@@ -212,14 +198,13 @@ async function renderTrending(host, msg) {
                 <div class="watchlist-header-stats cf-stats-comics">— comics</div>
             </div>
         </div>
-
         <div class="cf-trending-row" data-row="books">
             <h3 class="sectionTitle sectionTitle-cards" style="margin: 1.2em 0 0.4em;">Trending Books</h3>
-            ${SHELL.replace('cf-grid', 'cf-grid cf-grid-books')}
+            ${SHELL}
         </div>
         <div class="cf-trending-row" data-row="comics">
             <h3 class="sectionTitle sectionTitle-cards" style="margin: 1.2em 0 0.4em;">Trending Comics</h3>
-            ${SHELL.replace('cf-grid', 'cf-grid cf-grid-comics')}
+            ${SHELL}
         </div>`;
 
     try {
@@ -248,7 +233,6 @@ async function renderComingSoon(host, msg) {
             </div>
         </div>
         ${SHELL}`;
-
     try {
         const data = await api.discoverComingSoon(60);
         const items = data.items || [];
@@ -265,18 +249,16 @@ async function renderSearch(host, msg) {
         <div class="watchlist-header tab-header">
             <h2 class="cf-page-title">Search</h2>
             <div class="watchlist-header-right">
-                <select class="sort-button cf-search-kind">
+                <select class="cf-styled-select cf-search-kind">
                     <option value="">All</option>
                     <option value="book">Books</option>
                     <option value="comic">Comics</option>
                 </select>
             </div>
         </div>
-        <div class="search-container">
-            <div class="search-input-wrapper">
-                <span class="material-icons search-icon">search</span>
-                <input type="search" class="search-input cf-search-input" placeholder="Search books and comics…" autocomplete="off" />
-            </div>
+        <div class="cf-search-row">
+            <span class="material-icons cf-search-icon">search</span>
+            <input type="search" class="cf-search-fullwidth cf-search-input" placeholder="Search books and comics…" autocomplete="off" />
         </div>
         ${SHELL}`;
 
@@ -312,12 +294,7 @@ async function renderSearch(host, msg) {
                 grid.innerHTML = renderEmpty('No results.');
                 return;
             }
-            // Re-use paginated grid for the search-results host.
-            const tempHost = document.createElement('div');
-            tempHost.innerHTML = `<div class="cf-pagination-top"></div><div class="paginated-container"><div class="movie-history-grid cf-grid"></div></div><div class="cf-pagination-bottom"></div>`;
-            // Replace the existing grid + pagination slots with the temp host's
-            grid.innerHTML = '';
-            setupPaginatedGridInline(host, items, msg);
+            setupPaginatedGrid(host, items, msg);
         } catch (err) {
             if (myToken !== inflight) return;
             grid.innerHTML = renderError(err);
@@ -334,26 +311,20 @@ async function renderSearch(host, msg) {
     kindEl.addEventListener('change', () => { lastQuery = ''; go(); });
 }
 
-function setupPaginatedGridInline(host, items, msg) {
-    setupPaginatedGrid(host, items, msg);
-}
-
-// ----- entry point -----------------------------------------------------
-
 export async function render(root) {
     ({ api } = await import('./api.js?cb=' + Date.now()));
 
+    root.classList.add('cf-host');
     root.innerHTML = `
-        <div class="sections watchlist cypherflix-discover">
-            <div class="watchlist-tabs">
+        <div class="cf-glass-backdrop"></div>
+        <div class="cf-host-inner">
+            <div class="watchlist-tabs cf-discover-tabs">
                 ${SUB_TABS.map((t, i) => `
                     <button data-tab="${t.id}" class="${i === 0 ? 'active' : ''}">${t.label}</button>
                 `).join('')}
             </div>
-            <div data-tab="discover-content" class="active">
-                <div class="cf-status-msg"></div>
-                <div class="cf-tab-host"></div>
-            </div>
+            <div class="cf-status-msg"></div>
+            <div class="cf-tab-host"></div>
         </div>`;
 
     const tabHost = root.querySelector('.cf-tab-host');
@@ -365,9 +336,9 @@ export async function render(root) {
         if (id === 'search')     return renderSearch(tabHost, msg);
     }
 
-    root.querySelectorAll('.watchlist-tabs button').forEach((b) => {
+    root.querySelectorAll('.cf-discover-tabs button').forEach((b) => {
         b.addEventListener('click', () => {
-            root.querySelectorAll('.watchlist-tabs button').forEach((x) => x.classList.remove('active'));
+            root.querySelectorAll('.cf-discover-tabs button').forEach((x) => x.classList.remove('active'));
             b.classList.add('active');
             void activate(b.dataset.tab);
         });
