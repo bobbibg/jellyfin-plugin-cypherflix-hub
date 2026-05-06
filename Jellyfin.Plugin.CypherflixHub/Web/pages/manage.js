@@ -102,34 +102,32 @@ export async function render(root) {
         <div class="padded-left padded-right padded-top">
             <h1 class="sectionTitle">Manage Requests</h1>
 
-            <div class="sections cypherflix-manage">
-                <div class="watchlist-header">
-                    <div class="watchlist-tabs cf-status-tabs">
-                        ${STATUS_TABS.map((t, i) => `
-                            <button data-tab="${t.id}" class="${i === 0 ? 'active' : ''}">${t.label}</button>
-                        `).join('')}
+            <div class="cypherflix-manage">
+                <div class="watchlist-tabs cf-status-tabs">
+                    ${STATUS_TABS.map((t, i) => `
+                        <button data-tab="${t.id}" class="${i === 0 ? 'active' : ''}">${t.label}</button>
+                    `).join('')}
+                </div>
+                <div class="cf-toolbar">
+                    <div class="selectContainer selectContainer-inline">
+                        <label class="selectLabel" for="cf-mng-kind">Kind</label>
+                        <select is="emby-select" id="cf-mng-kind" class="emby-select-withcolor cf-kind">
+                            ${KINDS.map(k => '<option value="' + k.value + '">' + k.label + '</option>').join('')}
+                        </select>
                     </div>
-                    <div class="watchlist-controls cf-toolbar">
-                        <div class="selectContainer selectContainer-inline">
-                            <label class="selectLabel" for="cf-mng-kind">Kind</label>
-                            <select is="emby-select" id="cf-mng-kind" class="emby-select-withcolor cf-kind">
-                                ${KINDS.map(k => '<option value="' + k.value + '">' + k.label + '</option>').join('')}
-                            </select>
-                        </div>
-                        <button is="emby-button" type="button" class="raised button-flat cf-refresh">
-                            <span class="material-icons" aria-hidden="true">refresh</span>
-                            <span>Refresh</span>
-                        </button>
-                        ${isAdmin ? `
-                        <button is="emby-button" type="button" class="raised button-flat cf-sweep">
-                            <span class="material-icons" aria-hidden="true">play_arrow</span>
-                            <span>Trigger sweep</span>
-                        </button>` : ''}
-                        <span class="cf-status-msg"></span>
-                    </div>
+                    <button is="emby-button" type="button" class="raised button-flat cf-refresh">
+                        <span class="material-icons" aria-hidden="true">refresh</span>
+                        <span>Refresh</span>
+                    </button>
+                    ${isAdmin ? `
+                    <button is="emby-button" type="button" class="raised button-flat cf-sweep">
+                        <span class="material-icons" aria-hidden="true">play_arrow</span>
+                        <span>Trigger sweep</span>
+                    </button>` : ''}
+                    <span class="cf-status-msg"></span>
                 </div>
 
-                <div class="cf-cards" data-tab="manage">
+                <div class="cf-cards">
                     <div class="progress-card cf-loading">Loading…</div>
                 </div>
             </div>

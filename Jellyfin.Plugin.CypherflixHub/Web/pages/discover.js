@@ -236,13 +236,13 @@ export async function render(root) {
     root.innerHTML = `
         <div class="padded-left padded-right padded-top">
             <h1 class="sectionTitle">Discover</h1>
-            <div class="sections cypherflix-discover">
+            <div class="cypherflix-discover">
                 <div class="watchlist-tabs cf-discover-tabs">
                     ${SUB_TABS.map((t, i) => `
                         <button data-tab="${t.id}" class="${i === 0 ? 'active' : ''}">${t.label}</button>
                     `).join('')}
                 </div>
-                <div class="watchlist-controls cf-toolbar">
+                <div class="cf-toolbar">
                     <span class="cf-status-msg"></span>
                 </div>
                 <div class="cf-tab-host"></div>
