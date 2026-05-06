@@ -25,10 +25,14 @@
 > from the patterns — but don't install the build artefacts on a
 > Jellyfin server you care about.
 >
-> **No hosting guarantee.** This repo and its sibling private grabber
-> may go private, get deleted, or be archived without notice. If
-> anything here is useful to you, **fork it now** so you have your own
-> copy.
+> **No guarantee this repo stays where it is.** It may be made
+> private, deleted, archived, or moved to a different account /
+> manifest URL with no notice. If anything here is useful to you,
+> **fork it now** so you have your own copy at a URL you control.
+>
+> **If I ever decide to open-source either of these (or Cypherflix
+> Grabber), I'll do that explicitly at a later time** — until then,
+> assume nothing about long-term availability.
 
 ---
 
