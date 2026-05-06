@@ -22,14 +22,49 @@ function authHeaders() {
     }
 }
 
+// Wait until ApiClient.getCurrentUser resolves to a real user — that's the
+// signal Jellyfin's session is fully established and the access token will
+// be honoured by [Authorize] controllers. On a fresh page-load the token
+// can be present but the session not yet bound, hitting our plugin with a
+// 401. Cap the wait at 5 s so a genuinely-not-logged-in user fails fast.
+let _sessionReady = null;
+function sessionReady() {
+    if (_sessionReady) return _sessionReady;
+    _sessionReady = (async () => {
+        const start = Date.now();
+        while (Date.now() - start < 5000) {
+            try {
+                const u = await window.ApiClient?.getCurrentUser?.();
+                if (u && u.Id) return true;
+            } catch (_) { /* retry */ }
+            await new Promise((r) => setTimeout(r, 100));
+        }
+        return false;
+    })();
+    return _sessionReady;
+}
+
 async function http(method, path, body) {
+    await sessionReady();
     const headers = { ...authHeaders() };
     const opts = { method, credentials: 'same-origin', headers };
     if (body !== undefined) {
         headers['Content-Type'] = 'application/json';
         opts.body = JSON.stringify(body);
     }
-    const r = await fetch(BASE + path, opts);
+    let r = await fetch(BASE + path, opts);
+    // One-shot retry on 401 — token may have been refreshed mid-flight, or
+    // the session wasn't fully bound yet.
+    if (r.status === 401) {
+        await new Promise((res) => setTimeout(res, 250));
+        const headers2 = { ...authHeaders() };
+        const opts2 = { method, credentials: 'same-origin', headers: headers2 };
+        if (body !== undefined) {
+            headers2['Content-Type'] = 'application/json';
+            opts2.body = JSON.stringify(body);
+        }
+        r = await fetch(BASE + path, opts2);
+    }
     if (!r.ok) {
         let detail = r.statusText;
         try { const j = await r.json(); if (j.detail) detail = j.detail; } catch (_) {}
