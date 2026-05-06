@@ -60,4 +60,26 @@ export const api = {
     regrabRequest:    (id)                            => http('POST', '/requests/' + id + '/regrab'),
     triggerSweep:     ()                              => http('POST', '/sweep'),
     triggerReorganize: (dryRun)                       => http('POST', '/reorganize?dry_run=' + (dryRun ? 'true' : 'false')),
+
+    // Discover — Seer-style browse + search surface backed by Hardcover and
+    // ComicVine on the grabber side. Each item carries a pre-baked
+    // watchlist_payload that the Request CTA POSTs verbatim.
+    discoverTrending:    (kind, limit) => {
+        const q = new URLSearchParams();
+        if (kind)  q.set('kind', kind);
+        if (limit) q.set('limit', String(limit));
+        return http('GET', '/discover/trending' + (q.toString() ? '?' + q : ''));
+    },
+    discoverComingSoon:  (limit) => {
+        const q = new URLSearchParams();
+        if (limit) q.set('limit', String(limit));
+        return http('GET', '/discover/coming-soon' + (q.toString() ? '?' + q : ''));
+    },
+    discoverSearch:      (q, kind, limit) => {
+        const params = new URLSearchParams();
+        params.set('q', q);
+        if (kind)  params.set('kind', kind);
+        if (limit) params.set('limit', String(limit));
+        return http('GET', '/discover/search?' + params.toString());
+    },
 };

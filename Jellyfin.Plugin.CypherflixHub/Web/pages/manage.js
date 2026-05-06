@@ -1,17 +1,27 @@
-// Manage view — list of requests with status filter and per-row actions.
-// Renders as a Jellyfin-native paperList of listItems (the same pattern
-// Jellyfin uses for track lists, episode lists, etc.). Actions appear in
-// .listItemAside on the right; for non-admin users the actions cluster
-// (and the Trigger Sweep button) hide entirely.
+// Manage view — visually matched to the KefinTweaks Watchlist plugin.
+// Reuses its .watchlist-tabs / .progress-card / .progress-poster /
+// .progress-details / .progress-actions class names so its CSS styles
+// our elements automatically. Backend cover URLs land in v1.3.x — for
+// now the poster is a material-icon fallback.
 import { api } from './api.js';
 import { isCurrentUserAdmin } from './user.js';
 
-const STATUSES = ['wanted','searching','snatched','downloading','importing','tagging','done','failed','blocked'];
+// Status sub-tab grouping — collapses the nine raw DB states into the
+// five buckets users actually care about. The "In progress" group covers
+// every state that means "the request is being worked on right now".
+const STATUS_TABS = [
+    { id: 'wanted',     label: 'Wanted',      statuses: ['wanted'] },
+    { id: 'inProgress', label: 'In progress', statuses: ['searching', 'snatched', 'downloading', 'importing', 'tagging'] },
+    { id: 'done',       label: 'Done',        statuses: ['done'] },
+    { id: 'issues',     label: 'Issues',      statuses: ['failed', 'blocked'] },
+    { id: 'all',        label: 'All',         statuses: null },
+];
+
 const KINDS = [
-    { value: '', label: 'All' },
+    { value: '',            label: 'All' },
     { value: 'comic_issue', label: 'Comics' },
-    { value: 'book', label: 'Books' },
-    { value: 'audiobook', label: 'Audiobooks' },
+    { value: 'book',        label: 'Books' },
+    { value: 'audiobook',   label: 'Audiobooks' },
 ];
 
 function escapeHtml(s) {
@@ -20,125 +30,158 @@ function escapeHtml(s) {
     );
 }
 
-function statusPill(s) {
-    return '<span class="cf-pill cf-pill-' + s + '">' + s + '</span>';
-}
-
 function fmtDate(s) {
     if (!s) return '';
     try { return new Date(s).toLocaleDateString(); } catch (_) { return s; }
 }
 
-// "Series Name #129 — Issue Title" / "Author — Book Title" — collapses null
-// fields cleanly so we never render dangling separators.
-function primaryLine(r) {
-    return r.series_name || r.title || '(untitled)';
+function statusPill(s) {
+    return '<span class="cf-pill cf-pill-' + s + '">' + s + '</span>';
 }
-function secondaryLine(r) {
-    const parts = [];
-    if (r.issue_number) parts.push('#' + r.issue_number);
-    if (r.title && r.title !== r.series_name) parts.push(r.title);
-    if (r.series_year) parts.push(String(r.series_year));
-    if (r.release_date) parts.push(fmtDate(r.release_date));
-    return parts.join(' · ');
+
+// One card per request — DOM mirrors KefinTweaks's progress-card so its
+// stylesheet (loaded by their plugin) styles us for free.
+function renderCard(r, isAdmin) {
+    const kindIcon = r.kind === 'book' ? 'menu_book'
+        : r.kind === 'audiobook' ? 'headphones'
+        : 'auto_stories';   // comics → book-stack
+
+    const titleParts = [];
+    if (r.series_name) titleParts.push(r.series_name);
+    if (r.issue_number) titleParts.push('#' + r.issue_number);
+    const primary = titleParts.join(' ') || r.title || '(untitled)';
+    const subtitle = r.title && r.title !== r.series_name ? r.title : '';
+
+    const stats = [];
+    if (r.series_year)  stats.push(String(r.series_year));
+    if (r.release_date) stats.push('Released ' + fmtDate(r.release_date));
+    if (r.authors)      stats.push(r.authors);
+    if (r.progress_pct != null) stats.push(Math.round(r.progress_pct) + '%');
+
+    const actions = isAdmin ? `
+        <div class="progress-actions">
+            <button class="action-link cf-retry"        title="Reset to wanted">+ Retry</button>
+            <button class="action-link cf-refresh-meta" title="Refresh metadata from providers">+ Refresh metadata</button>
+            <button class="action-link cf-regrab"      title="Delete file and re-search">+ Re-grab</button>
+        </div>` : '';
+
+    return `
+        <div class="progress-card cf-request-card" data-id="${r.id}">
+            <div class="progress-card-content">
+                <div class="progress-poster cf-progress-poster">
+                    <span class="material-icons cf-poster-fallback" aria-hidden="true">${kindIcon}</span>
+                </div>
+                <div class="progress-details">
+                    <div class="progress-header">
+                        <h3 class="progress-title">${escapeHtml(primary)}</h3>
+                        ${statusPill(r.status)}
+                    </div>
+                    ${subtitle ? '<div class="progress-last-watched">' + escapeHtml(subtitle) + '</div>' : ''}
+                    <div class="progress-stats">${stats.map(escapeHtml).join(' · ')}</div>
+                    ${r.status_reason ? '<div class="progress-last-watched cf-status-reason">' + escapeHtml(r.status_reason) + '</div>' : ''}
+                    ${actions}
+                </div>
+            </div>
+        </div>`;
 }
 
 export async function render(root) {
     const isAdmin = await isCurrentUserAdmin();
 
-    // Top-level layout uses Jellyfin's standard padded-* page conventions.
-    // Toolbar selects + buttons are emby-* custom elements styled by Jellyfin.
+    // Wrap in a sibling-of-watchlist .sections div so KefinTweaks-scoped
+    // CSS rules (which are typically scoped to .sections.watchlist) still
+    // partially apply. We add our own `.cypherflix-manage` modifier for any
+    // tweaks specific to this page.
     root.innerHTML = `
         <div class="padded-left padded-right padded-top">
-            <h1 class="sectionTitle">Cypherflix Manage</h1>
+            <h1 class="sectionTitle">Manage Requests</h1>
 
-            <div class="cf-toolbar">
-                <div class="selectContainer selectContainer-inline">
-                    <label class="selectLabel" for="cf-mng-status">Status</label>
-                    <select is="emby-select" id="cf-mng-status" class="emby-select-withcolor cf-status">
-                        <option value="">All statuses</option>
-                        ${STATUSES.map(s => '<option value="' + s + '">' + s + '</option>').join('')}
-                    </select>
+            <div class="sections cypherflix-manage">
+                <div class="watchlist-header">
+                    <div class="watchlist-tabs cf-status-tabs">
+                        ${STATUS_TABS.map((t, i) => `
+                            <button data-tab="${t.id}" class="${i === 0 ? 'active' : ''}">${t.label}</button>
+                        `).join('')}
+                    </div>
+                    <div class="watchlist-controls cf-toolbar">
+                        <div class="selectContainer selectContainer-inline">
+                            <label class="selectLabel" for="cf-mng-kind">Kind</label>
+                            <select is="emby-select" id="cf-mng-kind" class="emby-select-withcolor cf-kind">
+                                ${KINDS.map(k => '<option value="' + k.value + '">' + k.label + '</option>').join('')}
+                            </select>
+                        </div>
+                        <button is="emby-button" type="button" class="raised button-flat cf-refresh">
+                            <span class="material-icons" aria-hidden="true">refresh</span>
+                            <span>Refresh</span>
+                        </button>
+                        ${isAdmin ? `
+                        <button is="emby-button" type="button" class="raised button-flat cf-sweep">
+                            <span class="material-icons" aria-hidden="true">play_arrow</span>
+                            <span>Trigger sweep</span>
+                        </button>` : ''}
+                        <span class="cf-status-msg"></span>
+                    </div>
                 </div>
-                <div class="selectContainer selectContainer-inline">
-                    <label class="selectLabel" for="cf-mng-kind">Kind</label>
-                    <select is="emby-select" id="cf-mng-kind" class="emby-select-withcolor cf-kind">
-                        ${KINDS.map(k => '<option value="' + k.value + '">' + k.label + '</option>').join('')}
-                    </select>
-                </div>
-                <button is="emby-button" type="button" class="raised button-flat cf-refresh">
-                    <span class="material-icons" aria-hidden="true">refresh</span>
-                    <span>Refresh</span>
-                </button>
-                ${isAdmin ? `
-                <button is="emby-button" type="button" class="raised button-flat cf-sweep">
-                    <span class="material-icons" aria-hidden="true">play_arrow</span>
-                    <span>Trigger sweep</span>
-                </button>` : ''}
-                <span class="cf-status-msg"></span>
-            </div>
 
-            <div class="paperList cf-rows">
-                <div class="listItem cf-loading">Loading…</div>
+                <div class="cf-cards" data-tab="manage">
+                    <div class="progress-card cf-loading">Loading…</div>
+                </div>
             </div>
         </div>`;
 
     const $ = (sel) => root.querySelector(sel);
-    const list = $('.cf-rows');
-    const statusFilter = $('.cf-status');
+    const cardsHost = $('.cf-cards');
     const kindFilter = $('.cf-kind');
     const msg = $('.cf-status-msg');
-    statusFilter.value = 'wanted';
 
-    // Each request renders as a Jellyfin-native .listItem. The icon button
-    // pattern (paper-icon-button-light + emby-button) matches the action
-    // buttons used on item-detail pages (e.g. play / mark-watched).
-    function renderRow(r) {
-        const adminActions = isAdmin ? `
-            <div class="listItem-aside cf-actions">
-                <button is="paper-icon-button-light" type="button" class="paper-icon-button-light emby-button cf-retry"        title="Retry"><span class="material-icons" aria-hidden="true">replay</span></button>
-                <button is="paper-icon-button-light" type="button" class="paper-icon-button-light emby-button cf-refresh-meta" title="Refresh metadata"><span class="material-icons" aria-hidden="true">cloud_sync</span></button>
-                <button is="paper-icon-button-light" type="button" class="paper-icon-button-light emby-button cf-regrab"      title="Re-grab"><span class="material-icons" aria-hidden="true">file_download</span></button>
-            </div>` : '';
-        const progressLine = r.progress_pct == null ? '' :
-            '<div class="listItemBodyText secondary">Progress: ' + Math.round(r.progress_pct) + '%</div>';
-        return `
-            <div class="listItem listItem-border" data-id="${r.id}">
-                <div class="listItemBody two-line">
-                    <div class="listItemBodyText">${escapeHtml(primaryLine(r))}</div>
-                    <div class="listItemBodyText secondary">${escapeHtml(secondaryLine(r))}</div>
-                    ${progressLine}
-                </div>
-                <div class="listItem-aside cf-status-cell">${statusPill(r.status)}</div>
-                ${adminActions}
-            </div>`;
-    }
+    let activeTab = STATUS_TABS[0];
 
     async function refresh() {
         msg.textContent = '';
-        list.innerHTML = '<div class="listItem cf-loading">Loading…</div>';
+        cardsHost.innerHTML = '<div class="progress-card cf-loading">Loading…</div>';
         try {
-            const params = { limit: 200 };
-            if (statusFilter.value) params.status = statusFilter.value;
-            if (kindFilter.value)   params.kind   = kindFilter.value;
-            const data = await api.listRequests(params);
-            if (!data.items.length) {
-                list.innerHTML = '<div class="listItem cf-empty">No requests in this state.</div>';
+            const items = [];
+            const statuses = activeTab.statuses || [null];
+            // For multi-status tabs we issue one fetch per status and merge.
+            // The backend pages per-status anyway and this keeps the limit
+            // semantics predictable per group.
+            for (const s of statuses) {
+                const params = { limit: 200 };
+                if (s) params.status = s;
+                if (kindFilter.value) params.kind = kindFilter.value;
+                const data = await api.listRequests(params);
+                items.push(...(data.items || []));
+            }
+            if (!items.length) {
+                cardsHost.innerHTML = '<div class="progress-card cf-empty">No requests in this view.</div>';
                 return;
             }
-            list.innerHTML = data.items.map(renderRow).join('');
+            // Sort: most-recently-updated first.
+            items.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
+            cardsHost.innerHTML = items.map(r => renderCard(r, isAdmin)).join('');
         } catch (err) {
-            list.innerHTML = '<div class="listItem cf-error">Error: ' + escapeHtml(err.message) + '</div>';
+            cardsHost.innerHTML = '<div class="progress-card cf-error">Error: ' + escapeHtml(err.message) + '</div>';
         }
     }
 
+    // Status sub-tab switching. Mirrors KefinTweaks's pattern: toggle
+    // .active on the buttons, then re-fetch with the new filter set.
+    root.querySelectorAll('.cf-status-tabs button').forEach((b) => {
+        b.addEventListener('click', () => {
+            root.querySelectorAll('.cf-status-tabs button').forEach((x) => x.classList.remove('active'));
+            b.classList.add('active');
+            activeTab = STATUS_TABS.find((t) => t.id === b.dataset.tab) || STATUS_TABS[0];
+            void refresh();
+        });
+    });
+
     if (isAdmin) {
-        list.addEventListener('click', async (e) => {
+        cardsHost.addEventListener('click', async (e) => {
             const btn = e.target.closest('button');
             if (!btn) return;
-            const item = btn.closest('.listItem[data-id]');
-            if (!item) return;
-            const id = parseInt(item.dataset.id, 10);
+            const card = btn.closest('.progress-card[data-id]');
+            if (!card) return;
+            const id = parseInt(card.dataset.id, 10);
             try {
                 if (btn.classList.contains('cf-retry')) {
                     await api.retryRequest(id);
@@ -172,7 +215,6 @@ export async function render(root) {
     }
 
     root.querySelector('.cf-refresh').addEventListener('click', refresh);
-    statusFilter.addEventListener('change', refresh);
     kindFilter.addEventListener('change', refresh);
 
     refresh();

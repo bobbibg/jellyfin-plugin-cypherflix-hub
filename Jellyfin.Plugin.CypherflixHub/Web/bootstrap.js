@@ -42,18 +42,26 @@
     }
 
     function mountUserDrawerLinks() {
-        // customMenuOptions is the user-drawer section that holds "Watchlist"
-        // — visible to every user. pluginMenuOptions is hidden via CSS in
-        // Jellyfin 10.11+ regardless of whether plugins put items there.
-        // libraryMenuOptions is the next-best fallback.
+        // Prefer KefinTweaksUtils.addCustomMenuLink when it's installed —
+        // that's the same helper KefinTweaks's Watchlist uses, and it
+        // handles its own re-mount lifecycle properly. Falls back to direct
+        // injection into customMenuOptions otherwise.
+        if (window.KefinTweaksUtils && typeof window.KefinTweaksUtils.addCustomMenuLink === 'function') {
+            if (window.__cypherflixDrawerLinksMounted) return true;
+            try {
+                window.KefinTweaksUtils.addCustomMenuLink('Discover', 'auto_stories', '#/cypherflix/discover');
+                window.KefinTweaksUtils.addCustomMenuLink('Manage',   'fact_check',   '#/cypherflix/manage');
+                window.__cypherflixDrawerLinksMounted = true;
+                return true;
+            } catch (_) { /* fall through */ }
+        }
+        // Fallback: direct DOM injection.
         const host =
             document.querySelector('.customMenuOptions') ||
             document.querySelector('.libraryMenuOptions') ||
             document.querySelector('.pluginMenuOptions');
         if (!host) return false;
         if (host.querySelector('[data-cf-nav]')) return true;
-        // Prepend so Discover/Manage sit at the top of the section, above
-        // anything the user might already have there (Watchlist etc.).
         const manage   = navLink('#/cypherflix/manage',   'fact_check',   'Manage');
         const discover = navLink('#/cypherflix/discover', 'auto_stories', 'Discover');
         host.insertBefore(manage,   host.firstChild);

@@ -78,6 +78,74 @@
     margin-right: 0.75rem;
 }
 
+/* Card poster — fall back to material icon when no cover_url is available.
+   Keeps the slot occupied with the same dimensions KefinTweaks Watchlist's
+   .progress-poster expects. */
+.cypherflixPage .cf-progress-poster img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: inherit;
+    display: block;
+}
+.cypherflixPage .cf-poster-fallback {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 3rem;
+    color: var(--theme-secondary-text-color, rgba(255, 255, 255, 0.4));
+    background: var(--card-bg-color, rgba(255, 255, 255, 0.06));
+    border-radius: inherit;
+}
+
+/* Summary line on Discover cards — KefinTweaks's .progress-last-watched
+   already styles this; we just clamp to a few lines so cards stay even. */
+.cypherflixPage .cf-summary {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-top: 0.25em;
+}
+
+/* Manage and Discover sub-tabs — match KefinTweaks .watchlist-tabs spacing
+   when the host plugin's CSS isn't loaded. */
+.cypherflixPage .cf-status-tabs,
+.cypherflixPage .cf-discover-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0.5rem 0;
+}
+
+.cypherflixPage .cf-toolbar {
+    margin-top: 0.4rem;
+}
+
+/* Discover horizontal card row — matches the home-page carousel feel
+   without depending on Jellyfin's cardBuilder. */
+.cypherflixPage .cf-row { margin-bottom: 1.6rem; }
+.cypherflixPage .cf-row .cf-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+    gap: 0.8rem;
+}
+
+.cypherflixPage .cf-search-bar {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.8rem;
+}
+.cypherflixPage .cf-search-wrap { flex: 1; min-width: 14rem; }
+
+.cypherflixPage .cf-request-btn.cf-requested {
+    color: var(--theme-secondary-text-color, rgba(255, 255, 255, 0.5));
+    cursor: default;
+}
+
 /* ----- discover horizontal scrollers --------------------------------- */
 /* Jellyfin's home page renders horizontal carousels with .padded-left,
    .sectionTitle, and .itemsContainer.scrollX.  We mirror that here so the
