@@ -1,17 +1,23 @@
-// Cypherflix Hub bootstrap. Injected into Jellyfin's index.html. Adds a "Cypherflix"
-// entry to the user menu and renders the Manage / Discover tabs in a slide-over panel.
+// Cypherflix Hub bootstrap — runs once per Jellyfin web load.
+// Adds Discover + Manage entries into the user drawer's pluginMenuOptions
+// container, listens for hashchange, and mounts our routed pages on top of
+// Jellyfin's content area. No floating overlays, no custom modal — pages
+// integrate with Jellyfin's existing SPA chrome.
 
 (function () {
     'use strict';
     if (window.__cypherflixHubLoaded) return;
     window.__cypherflixHubLoaded = true;
 
-    const STYLE_URL = '/CypherflixHub/Web/styles.css';
-    const PAGES = {
-        manage:   '/CypherflixHub/Web/pages/manage.js',
-        discover: '/CypherflixHub/Web/pages/discover.js',
+    const ROUTES = {
+        '#/cypherflix/discover': { module: '/CypherflixHub/Web/pages/discover.js', title: 'Discover' },
+        '#/cypherflix/manage':   { module: '/CypherflixHub/Web/pages/manage.js',   title: 'Manage'   },
     };
 
+    const STYLE_URL = '/CypherflixHub/Web/styles.css';
+    const CONTAINER_ID = 'cypherflixPage';
+
+    // ----- styles --------------------------------------------------------
     function ensureStyles() {
         if (document.querySelector('link[data-cypherflix]')) return;
         const link = document.createElement('link');
@@ -21,90 +27,169 @@
         document.head.appendChild(link);
     }
 
-    function makePanel() {
-        let panel = document.getElementById('cf-hub-panel');
-        if (panel) return panel;
-        panel = document.createElement('div');
-        panel.id = 'cf-hub-panel';
-        panel.className = 'cf-panel cf-hidden';
-        panel.innerHTML = `
-            <div class="cf-panel-header">
-                <h2>Cypherflix</h2>
-                <nav class="cf-tabs">
-                    <button class="cf-tab cf-tab-active" data-page="manage">Manage</button>
-                    <button class="cf-tab" data-page="discover">Discover</button>
-                </nav>
-                <button class="cf-close" aria-label="Close">×</button>
-            </div>
-            <div class="cf-panel-body" id="cf-page-root">
-                <div class="cf-loading">Loading…</div>
-            </div>`;
-        document.body.appendChild(panel);
-
-        panel.querySelector('.cf-close').addEventListener('click', () => panel.classList.add('cf-hidden'));
-        panel.querySelectorAll('.cf-tab').forEach(t => t.addEventListener('click', () => {
-            panel.querySelectorAll('.cf-tab').forEach(x => x.classList.remove('cf-tab-active'));
-            t.classList.add('cf-tab-active');
-            void loadPage(t.dataset.page);
-        }));
-        return panel;
+    // ----- sidenav injection --------------------------------------------
+    // Render an emby-linkbutton matching native Jellyfin nav items.
+    function navLink(href, icon, label, extraClass) {
+        const a = document.createElement('a');
+        a.setAttribute('is', 'emby-linkbutton');
+        a.className = 'navMenuOption lnkMediaFolder emby-button ' + (extraClass || '');
+        a.href = href;
+        a.dataset.cfNav = label;
+        a.innerHTML =
+            '<span class="material-icons navMenuOptionIcon" aria-hidden="true">' + icon + '</span>' +
+            '<span class="navMenuOptionText">' + label + '</span>';
+        return a;
     }
 
-    async function loadPage(name) {
-        const root = document.getElementById('cf-page-root');
-        if (!root) return;
-        root.innerHTML = '<div class="cf-loading">Loading…</div>';
+    function mountUserDrawerLinks() {
+        const host = document.getElementById('pluginMenuOptions');
+        if (!host) return false;
+        if (host.querySelector('[data-cf-nav]')) return true;
+        host.appendChild(navLink('#/cypherflix/discover', 'auto_stories', 'Discover'));
+        host.appendChild(navLink('#/cypherflix/manage',   'fact_check',   'Manage'));
+        return true;
+    }
+
+    // Admin dashboard side has a Material-UI drawer with a different DOM
+    // shape — list-of-buttons inside a <ul>. We append a single "Cypherflix
+    // Manage" item so admins can jump to the Manage page without leaving the
+    // dashboard chrome. React doesn't unmount sibling DOM, so this sticks.
+    function mountAdminDrawerLink() {
+        const drawer = document.querySelector('.MuiDrawer-paper.MuiDrawer-paperAnchorDock');
+        if (!drawer) return false;
+        const list = drawer.querySelector('ul');
+        if (!list) return false;
+        if (list.querySelector('[data-cf-admin-nav]')) return true;
+        // Match the Mui list item shape — clone the structure of an existing
+        // entry so theme classes flow through, then swap the contents.
+        const proto = list.querySelector('a.MuiButtonBase-root');
+        if (!proto) return false;
+        const li = document.createElement('li');
+        li.className = proto.parentElement?.className || '';
+        li.setAttribute('data-cf-admin-nav', '');
+        const a = document.createElement('a');
+        a.className = proto.className;
+        a.setAttribute('tabindex', '0');
+        a.href = '#/cypherflix/manage';
+        a.innerHTML =
+            '<div class="MuiListItemIcon-root ' +
+            (proto.querySelector('.MuiListItemIcon-root')?.className || '') +
+            '"><span class="material-icons" aria-hidden="true">fact_check</span></div>' +
+            '<div class="MuiListItemText-root ' +
+            (proto.querySelector('.MuiListItemText-root')?.className || '') +
+            '"><span class="MuiTypography-root MuiTypography-body1 MuiListItemText-primary">Cypherflix Manage</span></div>';
+        li.appendChild(a);
+        list.appendChild(li);
+        return true;
+    }
+
+    // ----- routed page container ----------------------------------------
+    // Find Jellyfin's main page container (where .page elements live) and
+    // create our own .page sibling that we toggle visibility on.
+    function ensurePageContainer() {
+        let container = document.getElementById(CONTAINER_ID);
+        if (container) return container;
+        const host =
+            document.querySelector('.mainAnimatedPagesContainer') ||
+            document.querySelector('.skinBody') ||
+            document.body;
+        container = document.createElement('div');
+        container.id = CONTAINER_ID;
+        // Match Jellyfin's .page conventions so theme-level page styles apply.
+        container.className = 'page hide cypherflixPage padded-bottom-page';
+        container.setAttribute('data-cf-page', '');
+        host.appendChild(container);
+        return container;
+    }
+
+    // ----- routing -------------------------------------------------------
+    let currentModule = null;
+
+    function showOurPage(container) {
+        // Hide Jellyfin's own pages so our content is what's visible.
+        document.querySelectorAll('.page:not(.cypherflixPage)').forEach(p => {
+            if (!p.classList.contains('hide')) {
+                p.dataset.cfHidden = '1';
+                p.classList.add('hide');
+            }
+        });
+        container.classList.remove('hide');
+    }
+
+    function hideOurPage(container) {
+        container.classList.add('hide');
+        // Unhide everything we hid so Jellyfin's SPA goes back to normal.
+        document.querySelectorAll('.page[data-cf-hidden="1"]').forEach(p => {
+            p.classList.remove('hide');
+            delete p.dataset.cfHidden;
+        });
+    }
+
+    async function renderRoute(hash) {
+        ensureStyles();
+        const container = ensurePageContainer();
+        const route = ROUTES[hash];
+        if (!route) {
+            hideOurPage(container);
+            currentModule = null;
+            return;
+        }
+        document.title = 'Cypherflix ' + route.title;
+        showOurPage(container);
+        container.innerHTML =
+            '<div class="padded-left padded-right padded-top">' +
+            '  <div class="cf-loading">Loading ' + route.title + '…</div>' +
+            '</div>';
         try {
-            const mod = await import(PAGES[name]);
-            await mod.render(root);
+            const mod = await import(route.module);
+            currentModule = mod;
+            await mod.render(container);
         } catch (err) {
-            root.innerHTML = `<div class="cf-error">Failed to load page: ${String(err && err.message || err)}</div>`;
+            console.error('cypherflix-hub: failed to load', route.module, err);
+            container.innerHTML =
+                '<div class="padded-left padded-right padded-top">' +
+                '  <div class="cf-error">Failed to load ' + route.title + ': ' +
+                String(err && err.message || err) + '</div>' +
+                '</div>';
         }
     }
 
-    function openPanel() {
-        ensureStyles();
-        const panel = makePanel();
-        panel.classList.remove('cf-hidden');
-        const active = panel.querySelector('.cf-tab.cf-tab-active');
-        if (active) void loadPage(active.dataset.page || 'manage');
+    function onHashChange() {
+        renderRoute(window.location.hash);
     }
 
-    // Mount a top-bar entry. Try a few known selectors so we work across
-    // jellyfin-web minor versions.
-    function mountTrigger() {
-        if (document.querySelector('.cf-trigger')) return;
-        const headerRight = document.querySelector('.headerRight, .skinHeader-userMenuButtons, .headerUser, .skinHeader');
-        if (!headerRight) return;
-        const btn = document.createElement('button');
-        btn.className = 'cf-trigger headerButton headerButtonRight paper-icon-button-light';
-        btn.title = 'Cypherflix';
-        btn.innerHTML = '<span class="material-icons" aria-hidden="true">auto_stories</span>';
-        btn.addEventListener('click', (e) => { e.preventDefault(); openPanel(); });
-        headerRight.appendChild(btn);
-    }
-
+    // ----- mount loop ----------------------------------------------------
+    // Jellyfin re-renders portions of the DOM (drawer, page area) on
+    // navigation, so we re-attempt sidenav injection whenever the body
+    // mutates. Cheap because mountUserDrawerLinks() short-circuits.
     function tryMount() {
-        try { mountTrigger(); } catch (_) {}
+        try {
+            mountUserDrawerLinks();
+            mountAdminDrawerLink();
+            ensurePageContainer();
+            // Re-apply route visibility — if Jellyfin recreated our container
+            // or unhid pages during navigation, sync state from the URL.
+            if (ROUTES[window.location.hash]) {
+                renderRoute(window.location.hash);
+            }
+        } catch (_) { /* best-effort */ }
     }
 
-    // Mount on initial load and observe DOM changes — Jellyfin re-renders
-    // the header on navigation in some flows.
     document.addEventListener('DOMContentLoaded', tryMount);
     tryMount();
-    const observer = new MutationObserver(tryMount);
-    observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
+    new MutationObserver(tryMount).observe(
+        document.body || document.documentElement,
+        { childList: true, subtree: true },
+    );
 
-    // Keyboard shortcut (Shift+C) to open the panel — handy during dev.
-    document.addEventListener('keydown', (e) => {
-        if (e.shiftKey && (e.key === 'C' || e.key === 'c') && !e.ctrlKey && !e.altKey && !e.metaKey) {
-            const target = e.target;
-            const tag = (target && target.tagName) || '';
-            if (tag === 'INPUT' || tag === 'TEXTAREA' || (target && target.isContentEditable)) return;
-            openPanel();
-        }
-    });
+    window.addEventListener('hashchange', onHashChange);
+    if (ROUTES[window.location.hash]) renderRoute(window.location.hash);
 
-    // Expose for debugging / external triggers
-    window.cypherflix = { open: openPanel };
+    // Expose for debugging
+    window.cypherflix = {
+        navigate: (where) => {
+            const h = where.startsWith('#/') ? where : '#/cypherflix/' + where;
+            window.location.hash = h;
+        },
+    };
 }());

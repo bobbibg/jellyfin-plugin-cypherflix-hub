@@ -1,133 +1,173 @@
-/* Cypherflix Hub — slide-over panel + table styles. Inherits Jellyfin theme
-   variables where available, with sensible fallbacks. */
+/* Cypherflix Hub — page styles. We lean on Jellyfin's own classes wherever
+   possible (.detailTable, .raised, .button-flat, .cardBox, .listItem, etc).
+   These rules are minimal additions for things Jellyfin doesn't ship classes
+   for (status pills, custom row layouts), and they all source colour /
+   typography from Jellyfin's CSS variables so a theme switch flows through. */
 
-#cf-hub-panel.cf-panel {
-    position: fixed; inset: 0;
-    background: var(--theme-background-color, #101010);
-    color: var(--theme-primary-text-color, #fff);
-    z-index: 9999;
-    display: flex; flex-direction: column;
-    font-family: var(--theme-font-family, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
-}
-#cf-hub-panel.cf-hidden { display: none; }
-
-.cf-panel-header {
-    display: flex; align-items: center; gap: 1rem;
-    padding: 0.75rem 1rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    background: var(--card-bg-color, #1c1c1c);
-}
-.cf-panel-header h2 {
-    margin: 0;
-    color: var(--theme-primary-color, #00a4dc);
-    font-size: 1.25rem;
-}
-.cf-panel-body { padding: 1rem; overflow: auto; flex: 1; }
-
-.cf-tabs { display: flex; gap: 0.25rem; flex: 1; }
-.cf-tab {
-    background: transparent;
-    color: var(--theme-secondary-text-color, #999);
-    border: 1px solid transparent;
-    padding: 0.4rem 0.9rem;
-    cursor: pointer;
-    border-radius: 0.25rem;
-    font-size: 0.95rem;
-}
-.cf-tab:hover { color: var(--theme-primary-text-color, #fff); }
-.cf-tab.cf-tab-active {
-    color: var(--theme-primary-color, #00a4dc);
-    border-color: var(--theme-primary-color, #00a4dc);
+.cypherflixPage {
+    /* Match Jellyfin's other .page elements — no custom positioning. */
+    color: inherit;
 }
 
-.cf-close {
-    background: transparent; color: var(--theme-primary-text-color, #fff);
-    border: none; cursor: pointer; font-size: 1.5rem; line-height: 1;
-    padding: 0 0.5rem;
+.cypherflixPage h1,
+.cypherflixPage h2.sectionTitle {
+    font-weight: 400;
+    margin: 0 0 0.25em;
 }
-.cf-close:hover { color: var(--theme-primary-color, #00a4dc); }
 
-.cf-toolbar {
-    display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
-    padding-bottom: 0.75rem;
+.cypherflixPage .cf-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
 }
-.cf-status-msg {
-    color: var(--theme-secondary-text-color, #999);
-    font-size: 0.875rem;
+
+.cypherflixPage .cf-status-msg {
+    color: var(--theme-secondary-text-color, rgba(255, 255, 255, 0.7));
+    font-size: 0.85em;
     margin-left: auto;
 }
 
-.cf-btn {
-    background: var(--theme-primary-color, #00a4dc);
-    color: var(--theme-primary-text-color, #fff);
-    border: none;
-    padding: 0.5rem 0.875rem;
-    border-radius: 0.25rem;
-    cursor: pointer;
-    font-size: 0.875rem;
-}
-.cf-btn:hover { background: var(--theme-accent-color, #aa5cc3); }
-.cf-btn-sm { padding: 0.25rem 0.5rem; font-size: 0.8rem; }
-.cf-actions { white-space: nowrap; }
-.cf-actions .cf-btn-sm + .cf-btn-sm { margin-left: 0.25rem; }
-
-.cf-filter {
-    background: var(--card-bg-color, #1c1c1c);
-    color: var(--theme-primary-text-color, #fff);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 0.25rem;
-    padding: 0.4rem 0.6rem;
-    font-size: 0.875rem;
+.cypherflixPage .cf-loading,
+.cypherflixPage .cf-empty,
+.cypherflixPage .cf-muted {
+    color: var(--theme-secondary-text-color, rgba(255, 255, 255, 0.7));
 }
 
-.cf-table-wrap { overflow: auto; }
-.cf-table {
-    width: 100%; border-collapse: collapse; font-size: 0.9rem;
+.cypherflixPage .cf-error {
+    color: #ff8b8b;
 }
-.cf-table th, .cf-table td {
-    text-align: left;
-    padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-.cf-table th {
-    color: var(--theme-secondary-text-color, #999);
-    font-weight: 500;
-    background: rgba(0, 0, 0, 0.15);
-}
-.cf-table-sm th, .cf-table-sm td { padding: 0.25rem 0.5rem; font-size: 0.825rem; }
 
-.cf-pill {
+/* ----- request-status pills ----------------------------------------- */
+
+.cypherflixPage .cf-pill {
     display: inline-block;
-    padding: 0.1rem 0.5rem;
+    padding: 0.1em 0.6em;
     border-radius: 9999px;
-    font-size: 0.75rem;
-    background: var(--card-bg-color, #1c1c1c);
+    font-size: 0.78em;
+    line-height: 1.5;
+    background: rgba(255, 255, 255, 0.08);
+    color: inherit;
 }
-.cf-pill-done       { background: rgba(34, 197, 94, 0.25); color: #65f797; }
-.cf-pill-failed     { background: rgba(239, 68, 68, 0.25); color: #ff8b8b; }
-.cf-pill-blocked    { background: rgba(239, 68, 68, 0.25); color: #ff8b8b; }
-.cf-pill-snatched, .cf-pill-downloading, .cf-pill-importing, .cf-pill-tagging
-    { background: rgba(59, 130, 246, 0.25); color: #8ab4ff; }
-.cf-pill-wanted     { background: rgba(234, 179, 8, 0.25); color: #f5d774; }
-.cf-pill-searching  { background: rgba(168, 85, 247, 0.2); color: #d3a3ff; }
+.cypherflixPage .cf-pill-done                                                    { background: rgba(34, 197, 94, 0.25);  color: #65f797; }
+.cypherflixPage .cf-pill-failed,
+.cypherflixPage .cf-pill-blocked                                                 { background: rgba(239, 68, 68, 0.25);  color: #ff8b8b; }
+.cypherflixPage .cf-pill-snatched,
+.cypherflixPage .cf-pill-downloading,
+.cypherflixPage .cf-pill-importing,
+.cypherflixPage .cf-pill-tagging                                                 { background: rgba(59, 130, 246, 0.25); color: #8ab4ff; }
+.cypherflixPage .cf-pill-wanted                                                  { background: rgba(234, 179, 8, 0.25);  color: #f5d774; }
+.cypherflixPage .cf-pill-searching                                               { background: rgba(168, 85, 247, 0.2);  color: #d3a3ff; }
 
-.cf-loading, .cf-empty, .cf-muted { color: var(--theme-secondary-text-color, #999); }
-.cf-error { color: #ff8b8b; }
+/* ----- request actions inline buttons -------------------------------- */
 
-.cf-discover { display: grid; gap: 1rem; max-width: 60rem; margin: 0 auto; }
-.cf-card {
-    background: var(--card-bg-color, #1c1c1c);
-    border-radius: 0.5rem; padding: 1rem;
+.cypherflixPage .cf-actions { white-space: nowrap; }
+.cypherflixPage .cf-actions button + button { margin-left: 0.25rem; }
+
+/* ----- discover horizontal scrollers --------------------------------- */
+/* Jellyfin's home page renders horizontal carousels with .padded-left,
+   .sectionTitle, and .itemsContainer.scrollX.  We mirror that here so the
+   visual rhythm matches the rest of the SPA. */
+
+.cypherflixPage .cf-row {
+    margin-bottom: 1.6rem;
 }
-.cf-card h3 { margin: 0 0 0.5rem; color: var(--theme-primary-color, #00a4dc); }
-.cf-status-row { padding: 0.15rem 0; }
-.cf-list { list-style: none; padding-left: 0; margin: 0.25rem 0 0; }
-.cf-list li { padding: 0.15rem 0; }
 
-.cf-trigger { color: var(--theme-primary-text-color, #fff); }
-.cf-trigger .material-icons { font-size: 1.5rem; }
+.cypherflixPage .cf-row .sectionTitle {
+    margin: 0 0 0.4rem;
+}
 
-@media (max-width: 720px) {
-    .cf-panel-header { flex-wrap: wrap; }
-    .cf-tabs { order: 2; flex-basis: 100%; }
+.cypherflixPage .cf-scroller {
+    display: flex;
+    gap: 0.6rem;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    padding-bottom: 0.4rem;
+}
+
+.cypherflixPage .cf-card {
+    flex: 0 0 auto;
+    width: 9.6rem;
+    scroll-snap-align: start;
+    background: transparent;
+    color: inherit;
+    display: flex;
+    flex-direction: column;
+}
+
+.cypherflixPage .cf-card .cf-cover {
+    width: 100%;
+    aspect-ratio: 2 / 3;
+    background-color: var(--card-bg-color, rgba(255, 255, 255, 0.08));
+    background-size: cover;
+    background-position: center;
+    border-radius: 0.25rem;
+    overflow: hidden;
+    position: relative;
+}
+
+.cypherflixPage .cf-card .cf-cover .cf-cover-fallback {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--theme-secondary-text-color, rgba(255, 255, 255, 0.4));
+    font-size: 2.5rem;
+}
+
+.cypherflixPage .cf-card .cf-card-body {
+    padding: 0.4rem 0.1rem 0.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    flex: 1;
+}
+
+.cypherflixPage .cf-card .cf-card-title {
+    font-size: 0.92rem;
+    line-height: 1.2;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.cypherflixPage .cf-card .cf-card-sub {
+    font-size: 0.78rem;
+    color: var(--theme-secondary-text-color, rgba(255, 255, 255, 0.6));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cypherflixPage .cf-card .cf-card-cta {
+    margin-top: 0.35rem;
+}
+
+.cypherflixPage .cf-card .cf-card-cta .emby-button,
+.cypherflixPage .cf-card .cf-card-cta button {
+    width: 100%;
+    font-size: 0.78rem;
+    padding: 0.3rem 0.4rem;
+}
+
+/* ----- discover search -------------------------------------------- */
+
+.cypherflixPage .cf-search-bar {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin: 0 0 1rem;
+}
+
+.cypherflixPage .cf-search-bar .cf-search-input {
+    flex: 1;
+}
+
+.cypherflixPage .cf-search-results {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(9.6rem, 1fr));
+    gap: 0.8rem 0.6rem;
 }
