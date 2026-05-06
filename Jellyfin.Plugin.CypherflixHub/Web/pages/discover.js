@@ -1,76 +1,102 @@
-// Discover view — backend health + watchlist summary. Catalog/search lands once
-// the backend's /api/v1/catalog/{kind}/* endpoints ship.
+// Discover view — Jellyseerr-style home for books + comics. v1.0.x ships
+// the page shell, search bar, and live status; trending / coming-soon rows
+// + per-card request CTA land in v1.1 once the backend `/discover/*` endpoints
+// are in place. Watchlist summary stays here so the page is useful day-one.
 import { api } from './api.js';
+
+function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
+        ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])
+    );
+}
 
 export async function render(root) {
     root.innerHTML = `
-        <div class="cf-discover">
-            <h2>Discover</h2>
-            <div class="cf-card">
-                <h3>Backend</h3>
-                <div class="cf-health">Checking…</div>
+        <div class="padded-left padded-right padded-top">
+            <h1 class="sectionTitle">Discover</h1>
+
+            <div class="cf-search-bar">
+                <div class="inputContainer flex-grow">
+                    <input is="emby-input" type="search" class="emby-input cf-search-input"
+                           placeholder="Search books and comics — coming in v1.1"
+                           disabled aria-disabled="true" />
+                </div>
+                <button is="emby-button" type="button" class="raised button-flat" disabled>
+                    <span class="material-icons" aria-hidden="true">search</span>
+                </button>
             </div>
-            <div class="cf-card">
-                <h3>Watchlist</h3>
-                <div class="cf-watchlist-summary">Loading…</div>
+
+            <div class="cf-row" data-row="trending-books">
+                <h2 class="sectionTitle sectionTitle-cards">Trending Books</h2>
+                <div class="cf-scroller cf-trending-books">
+                    <div class="cf-loading">Loading…</div>
+                </div>
             </div>
-            <div class="cf-card">
-                <h3>Search & subscribe</h3>
-                <p class="cf-muted">
-                    Live catalogue search lands when the backend's
-                    <code>/api/v1/catalog/{kind}/*</code> endpoints ship. Until then,
-                    use the <strong>Manage</strong> tab to drive the existing
-                    requests, or POST a watchlist directly via the API.
-                </p>
+
+            <div class="cf-row" data-row="trending-comics">
+                <h2 class="sectionTitle sectionTitle-cards">Trending Comics</h2>
+                <div class="cf-scroller cf-trending-comics">
+                    <div class="cf-loading">Loading…</div>
+                </div>
+            </div>
+
+            <div class="cf-row" data-row="coming-soon">
+                <h2 class="sectionTitle sectionTitle-cards">Coming Soon — From Your Library</h2>
+                <div class="cf-scroller cf-coming-soon">
+                    <div class="cf-loading">Loading…</div>
+                </div>
+            </div>
+
+            <div class="cf-row">
+                <h2 class="sectionTitle">Your watchlist</h2>
+                <div class="cf-watchlist-summary cf-muted">Loading…</div>
+            </div>
+
+            <div class="cf-row">
+                <h2 class="sectionTitle">Backend status</h2>
+                <div class="cf-health cf-muted">Checking…</div>
             </div>
         </div>`;
 
-    const health = root.querySelector('.cf-health');
-    const wl = root.querySelector('.cf-watchlist-summary');
+    const placeholderText =
+        'Trending content lands once <code>/api/v1/discover/trending</code> ships in v1.1.';
+    const placeholderRow = (target) => {
+        target.innerHTML = '<div class="cf-empty padded-left padded-right">' + placeholderText + '</div>';
+    };
+    placeholderRow(root.querySelector('.cf-trending-books'));
+    placeholderRow(root.querySelector('.cf-trending-comics'));
+    placeholderRow(root.querySelector('.cf-coming-soon'));
 
-    try {
-        const h = await api.health();
-        health.innerHTML = `
-            <div class="cf-status-row"><strong>Status:</strong> <span class="cf-pill cf-pill-done">${escapeHtml(h.status)}</span></div>
-            <div class="cf-status-row"><strong>Version:</strong> ${escapeHtml(h.version)}</div>
-            <div class="cf-status-row"><strong>Search in flight:</strong> ${h.in_flight && h.in_flight.search ? 'yes' : 'no'}</div>
-            ${h.clients ? renderClients(h.clients) : ''}`;
-    } catch (err) {
-        health.innerHTML = `<div class="cf-error">Unreachable: ${escapeHtml(err.message)}</div>`;
-    }
+    const wl = root.querySelector('.cf-watchlist-summary');
+    const health = root.querySelector('.cf-health');
 
     try {
         const data = await api.listWatchlist();
         const byKind = {};
         for (const w of (data.items || [])) byKind[w.kind] = (byKind[w.kind] || 0) + 1;
-        wl.innerHTML = `
-            <div>Total: <strong>${data.total ?? 0}</strong></div>
-            <ul class="cf-list">
-                ${Object.entries(byKind).map(([k, n]) => `<li>${escapeHtml(k)}: <strong>${n}</strong></li>`).join('') || '<li class="cf-muted">No watchlists yet.</li>'}
-            </ul>`;
+        wl.classList.remove('cf-muted');
+        wl.innerHTML =
+            'Total: <strong>' + (data.total == null ? 0 : data.total) + '</strong>' +
+            (Object.keys(byKind).length
+                ? ' &nbsp;·&nbsp; ' +
+                  Object.entries(byKind)
+                      .map(([k, n]) => escapeHtml(k) + ': <strong>' + n + '</strong>')
+                      .join(' &nbsp;·&nbsp; ')
+                : '');
     } catch (err) {
-        wl.innerHTML = `<div class="cf-error">Couldn't load watchlist: ${escapeHtml(err.message)}</div>`;
+        wl.innerHTML = '<span class="cf-error">Couldn’t load watchlist: ' + escapeHtml(err.message) + '</span>';
     }
-}
 
-function renderClients(clients) {
-    const rows = Object.entries(clients).map(([name, snap]) => `
-        <tr>
-            <td>${escapeHtml(name)}</td>
-            <td>${snap.breaker_open ? '<span class="cf-pill cf-pill-failed">open</span>' : '<span class="cf-pill cf-pill-done">closed</span>'}</td>
-            <td>${snap.requests_last_minute}/min</td>
-            <td>${snap.requests_last_hour}/hr</td>
-        </tr>`).join('');
-    return `
-        <details>
-            <summary>Provider clients</summary>
-            <table class="cf-table cf-table-sm">
-                <thead><tr><th>Source</th><th>Breaker</th><th>1m</th><th>1h</th></tr></thead>
-                <tbody>${rows}</tbody>
-            </table>
-        </details>`;
-}
-
-function escapeHtml(s) {
-    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    try {
+        const h = await api.health();
+        health.classList.remove('cf-muted');
+        const breakerOpen = Object.values(h.clients || {}).filter(c => c.breaker_open).length;
+        health.innerHTML =
+            'Status: <span class="cf-pill cf-pill-' + (h.status === 'ok' ? 'done' : 'failed') + '">' + escapeHtml(h.status) + '</span>' +
+            ' &nbsp;·&nbsp; Version: <strong>' + escapeHtml(h.version) + '</strong>' +
+            ' &nbsp;·&nbsp; Search: ' + ((h.in_flight && h.in_flight.search) ? 'in flight' : 'idle') +
+            ' &nbsp;·&nbsp; Breakers open: <strong>' + breakerOpen + '</strong>';
+    } catch (err) {
+        health.innerHTML = '<span class="cf-error">Backend unreachable: ' + escapeHtml(err.message) + '</span>';
+    }
 }

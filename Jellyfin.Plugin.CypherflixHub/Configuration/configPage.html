@@ -7,6 +7,17 @@
 <div id="cypherflixHubConfigurationPage" data-role="page" class="page type-interior pluginConfigurationPage" data-controller="__plugin/cypherflixHubConfigurationPage">
     <div data-role="content">
         <div class="content-primary">
+            <div class="paperList">
+                <a is="emby-linkbutton" class="raised block button-submit" href="#/cypherflix/manage">
+                    <span class="material-icons" aria-hidden="true">fact_check</span>
+                    <span>Open Cypherflix Manage</span>
+                </a>
+                <a is="emby-linkbutton" class="raised block" href="#/cypherflix/discover" style="margin-top: 0.4em;">
+                    <span class="material-icons" aria-hidden="true">auto_stories</span>
+                    <span>Open Cypherflix Discover</span>
+                </a>
+            </div>
+            <h2 style="margin-top: 1.5em;">Settings</h2>
             <form id="cypherflixHubConfigurationForm">
                 <div class="inputContainer">
                     <input is="emby-input" id="BackendUrl" name="BackendUrl" type="url" required label="Backend URL" />
