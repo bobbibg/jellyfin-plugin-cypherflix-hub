@@ -49,6 +49,13 @@ public class WebController : ControllerBase
         if (stream is null) return NotFound();
         using var ms = new MemoryStream();
         stream.CopyTo(ms);
+        // Plugin JS/CSS changes whenever the plugin DLL is updated; tell the
+        // browser never to cache so stale modules don't survive a plugin
+        // rebuild. The files are tiny (10-30 KB) so re-fetching per-page is
+        // fine.
+        Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0";
+        Response.Headers["Pragma"] = "no-cache";
+        Response.Headers["Expires"] = "0";
         return File(ms.ToArray(), contentType);
     }
 }
