@@ -180,14 +180,25 @@
             mountUserDrawerLinks();
             mountAdminDrawerLink();
             ensurePageContainer();
-            // If we're on a Cypherflix route but Jellyfin has unhidden every
-            // page during a navigation it routed itself, re-apply our hide
-            // state by toggling the container — but DON'T re-import the
-            // module or re-render content.
+
+            // When Jellyfin's own router doesn't recognise our hash it shows
+            // its #fallbackPage ("Page not found") on top of ours. Same can
+            // happen if the SPA re-renders any other .page mid-navigation.
+            // While a Cypherflix route is active, keep every non-Cypherflix
+            // page hidden — the per-element class guard makes this self-
+            // stabilising (no mutations once they're all hidden).
             const route = ROUTES[window.location.hash];
             const container = document.getElementById(CONTAINER_ID);
-            if (route && container && container.classList.contains('hide')) {
-                showOurPage(container);
+            if (route && container) {
+                if (container.classList.contains('hide')) {
+                    showOurPage(container);
+                }
+                document.querySelectorAll('.page:not(.cypherflixPage)').forEach((p) => {
+                    if (!p.classList.contains('hide')) {
+                        p.dataset.cfHidden = '1';
+                        p.classList.add('hide');
+                    }
+                });
             }
         } finally {
             mounting = false;
