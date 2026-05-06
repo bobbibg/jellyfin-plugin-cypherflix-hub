@@ -68,8 +68,63 @@
         }
     }
 
+    // Custom Tabs creates one customTab_<N> content container per tab on
+    // first config save, but doesn't always backfill containers when new
+    // tabs are added later — so the tab BUTTON appears but the BODY doesn't.
+    // We patch by reading the Custom Tabs plugin config, finding any tab
+    // whose ContentHtml contains one of our anchor signatures, and cloning
+    // a customTab_<N> div into existence with the configured HTML.
+    let _missingContainersChecked = false;
+    async function ensureCustomTabContainers() {
+        if (_missingContainersChecked) return;
+        const proto = document.querySelector('[id^="customTab_"]');
+        if (!proto) return;  // Custom Tabs hasn't initialised — try again later.
+        const parent = proto.parentElement;
+        if (!parent) return;
+        const client = window.ApiClient;
+        if (!client || typeof client.accessToken !== 'function') return;
+        const tok = client.accessToken();
+        if (!tok) return;
+        const base = (typeof client.serverAddress === 'function' ? client.serverAddress() : '') || '';
+        try {
+            const plugins = await fetch(base + '/Plugins', {
+                credentials: 'same-origin',
+                headers: { 'X-Emby-Token': tok },
+            }).then((r) => (r.ok ? r.json() : null));
+            if (!Array.isArray(plugins)) return;
+            const ct = plugins.find((p) => /custom.?tabs/i.test(p && p.Name || ''));
+            if (!ct) return;
+            const cfg = await fetch(base + '/Plugins/' + ct.Id + '/Configuration', {
+                credentials: 'same-origin',
+                headers: { 'X-Emby-Token': tok },
+            }).then((r) => (r.ok ? r.json() : null));
+            if (!cfg || !Array.isArray(cfg.Tabs)) return;
+            const ourSigs = ['cypherflix-discover', 'cypherflix-manage'];
+            for (let i = 0; i < cfg.Tabs.length; i++) {
+                const t = cfg.Tabs[i] || {};
+                const html = t.ContentHtml || '';
+                const isOurs = ourSigs.some((s) => html.indexOf(s) !== -1);
+                if (!isOurs) continue;
+                const expectedId = 'customTab_' + i;
+                if (document.getElementById(expectedId)) continue;
+                // Clone the prototype's wrapper attributes so Jellyfin's
+                // tab-routing logic recognises our container.
+                const node = proto.cloneNode(false);
+                node.id = expectedId;
+                if (proto.dataset.index !== undefined) {
+                    node.dataset.index = String(i + 2);  // Home=0, Favourites=1, custom=2+
+                }
+                node.innerHTML = html;
+                parent.appendChild(node);
+            }
+            _missingContainersChecked = true;
+        } catch (_) { /* best-effort; observer will retry */ }
+    }
+
     function tryRenderAll() {
         ensureStyles();
+        // Best-effort backfill any missing customTab_<N> containers.
+        void ensureCustomTabContainers();
         for (const key of Object.keys(ANCHORS)) {
             const host = document.querySelector(ANCHORS[key].selector + ':not([data-cf-rendered="1"])');
             if (host) void renderInto(host, key);
