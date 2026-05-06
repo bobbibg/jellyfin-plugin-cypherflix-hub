@@ -52,8 +52,48 @@
             document.querySelector('.pluginMenuOptions');
         if (!host) return false;
         if (host.querySelector('[data-cf-nav]')) return true;
-        host.appendChild(navLink('#/cypherflix/discover', 'auto_stories', 'Discover'));
-        host.appendChild(navLink('#/cypherflix/manage',   'fact_check',   'Manage'));
+        // Prepend so Discover/Manage sit at the top of the section, above
+        // anything the user might already have there (Watchlist etc.).
+        const manage   = navLink('#/cypherflix/manage',   'fact_check',   'Manage');
+        const discover = navLink('#/cypherflix/discover', 'auto_stories', 'Discover');
+        host.insertBefore(manage,   host.firstChild);
+        host.insertBefore(discover, host.firstChild);
+        return true;
+    }
+
+    // Inject a "Discover" tab into the Home page's tab strip
+    // (.tabs-viewmenubar .emby-tabs-slider), positioned just before the
+    // Watchlist tab when present so the order reads
+    //   Home  ·  Favourites  ·  Discover  ·  Watchlist.
+    // The tab is a plain <button> matching Jellyfin's emby-tab-button class
+    // — clicking it navigates to our route rather than participating in
+    // the data-index/?tab=N sequence the home page uses.
+    function mountTopTab() {
+        const slider = document.querySelector('.tabs-viewmenubar .emby-tabs-slider');
+        if (!slider) return false;
+        if (slider.querySelector('[data-cf-tab]')) return true;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.setAttribute('is', 'emby-button');
+        btn.className = 'emby-tab-button emby-button';
+        btn.setAttribute('data-cf-tab', 'discover');
+        btn.innerHTML = '<div class="emby-button-foreground">Discover</div>';
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            window.location.hash = '#/cypherflix/discover';
+        });
+        // Insert before the first Watchlist-style button (Custom Tabs
+        // creates buttons with id="customTabButton_*"). Failing that,
+        // append to the end.
+        const watchlistBtn = slider.querySelector('[id^="customTabButton_"]') ||
+                             Array.from(slider.querySelectorAll('button')).find(b =>
+                                 b.textContent.trim() === 'Watchlist');
+        if (watchlistBtn) {
+            slider.insertBefore(btn, watchlistBtn);
+        } else {
+            slider.appendChild(btn);
+        }
         return true;
     }
 
@@ -180,6 +220,7 @@
         try {
             mountUserDrawerLinks();
             mountAdminDrawerLink();
+            mountTopTab();
             ensurePageContainer();
 
             // When Jellyfin's own router doesn't recognise our hash it shows

@@ -60,10 +60,23 @@
 .cypherflixPage .cf-pill-wanted                                                  { background: rgba(234, 179, 8, 0.25);  color: #f5d774; }
 .cypherflixPage .cf-pill-searching                                               { background: rgba(168, 85, 247, 0.2);  color: #d3a3ff; }
 
-/* ----- request actions inline buttons -------------------------------- */
+/* ----- request list — leans on Jellyfin's .paperList / .listItem ----- */
+/* Jellyfin's listItem already provides the row layout, hover, and
+   secondary-text styling. We only fine-tune the actions column on the
+   right edge so the icon buttons sit flush. */
 
-.cypherflixPage .cf-actions { white-space: nowrap; }
-.cypherflixPage .cf-actions button + button { margin-left: 0.25rem; }
+.cypherflixPage .cf-actions {
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+}
+.cypherflixPage .cf-actions button + button { margin-left: 0.15rem; }
+
+.cypherflixPage .cf-status-cell {
+    display: flex;
+    align-items: center;
+    margin-right: 0.75rem;
+}
 
 /* ----- discover horizontal scrollers --------------------------------- */
 /* Jellyfin's home page renders horizontal carousels with .padded-left,
