@@ -1,20 +1,17 @@
-// Discover view — Seer-style browse over books + comics.
-// Three sub-tabs: Trending / Coming Soon / Search.
-// Cards reuse KefinTweaks Watchlist .progress-card class names so the
-// existing styling applies for free; backend supplies cover_url, so we
-// render <img> when present and a material-icon fallback otherwise.
-// Each card has a Request CTA that POSTs the pre-baked watchlist_payload
-// to /api/v1/watchlist.
-//
-// api.js is imported dynamically inside render() with a cache-buster so
-// plugin upgrades evict the stale module instance reliably.
+// Discover view — visually parallels KefinTweaks Watchlist > Movie History.
+// Three sub-tabs (Trending / Coming Soon / Search). Each renders a
+// .movie-history-grid of .movie-card cells driven by the new backend
+// /api/v1/discover/* endpoints. Cards carry a Request CTA that POSTs the
+// pre-baked watchlist_payload to /api/v1/watchlist.
 let api;
 
 const SUB_TABS = [
-    { id: 'trending',    label: 'Trending'    },
-    { id: 'comingSoon',  label: 'Coming Soon' },
-    { id: 'search',      label: 'Search'      },
+    { id: 'trending',   label: 'Trending'    },
+    { id: 'comingSoon', label: 'Coming Soon' },
+    { id: 'search',     label: 'Search'      },
 ];
+
+const PAGE_SIZE = 24;
 
 function escapeHtml(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
@@ -27,63 +24,106 @@ function fmtDate(s) {
     try { return new Date(s).toLocaleDateString(); } catch (_) { return s; }
 }
 
-// ----- card rendering --------------------------------------------------
-
 function kindIcon(kind) {
-    if (kind === 'book')           return 'menu_book';
-    if (kind === 'comic_issue')    return 'auto_stories';
-    if (kind === 'comic_series')   return 'auto_stories';
+    if (kind === 'book')         return 'menu_book';
+    if (kind === 'comic_issue')  return 'auto_stories';
+    if (kind === 'comic_series') return 'auto_stories';
     return 'collections_bookmark';
 }
+
+// ----- card rendering --------------------------------------------------
 
 function renderCard(item) {
     const titleParts = [];
     if (item.series_name) titleParts.push(item.series_name);
     if (item.issue_number) titleParts.push('#' + item.issue_number);
-    const primary = titleParts.join(' ') || item.title || '(untitled)';
-    const subtitle = item.title && item.title !== item.series_name ? item.title : '';
+    const title = titleParts.join(' ') || item.title || '(untitled)';
 
-    const stats = [];
-    if (item.year)         stats.push(String(item.year));
-    if (item.release_date) stats.push(fmtDate(item.release_date));
-    if (item.authors)      stats.push(item.authors);
+    const meta = [];
+    if (item.year)         meta.push('<span class="movie-year">' + escapeHtml(String(item.year)) + '</span>');
+    if (item.release_date) meta.push('<span class="movie-runtime"><span class="material-icons">event</span>' + escapeHtml(fmtDate(item.release_date)) + '</span>');
+
+    const summary = item.summary
+        ? '<div class="movie-watched-date">' + escapeHtml(item.summary.slice(0, 160)) + (item.summary.length > 160 ? '…' : '') + '</div>'
+        : '';
+    const author = item.authors
+        ? '<div class="movie-watched-date">' + escapeHtml(item.authors) + '</div>'
+        : '';
 
     const poster = item.cover_url
         ? '<img src="' + escapeHtml(item.cover_url) + '" alt="" loading="lazy" />'
-        : '<span class="material-icons cf-poster-fallback" aria-hidden="true">' + kindIcon(item.kind) + '</span>';
+        : '<div class="movie-poster-placeholder"><span class="material-icons">' + kindIcon(item.kind) + '</span></div>';
 
     return `
-        <div class="progress-card cf-discover-card"
+        <div class="movie-card cf-discover-card"
              data-source="${escapeHtml(item.source)}"
-             data-source-id="${escapeHtml(item.source_id)}"
-             data-watchlist-kind="${escapeHtml(item.watchlist_kind)}">
-            <div class="progress-card-content">
-                <div class="progress-poster cf-progress-poster">${poster}</div>
-                <div class="progress-details">
-                    <div class="progress-header">
-                        <h3 class="progress-title">${escapeHtml(primary)}</h3>
-                    </div>
-                    ${subtitle ? '<div class="progress-last-watched">' + escapeHtml(subtitle) + '</div>' : ''}
-                    <div class="progress-stats">${stats.map(escapeHtml).join(' · ')}</div>
-                    ${item.summary ? '<div class="progress-last-watched cf-summary">' + escapeHtml(item.summary.slice(0, 240)) + (item.summary.length > 240 ? '…' : '') + '</div>' : ''}
-                    <div class="progress-actions">
-                        <button class="action-link cf-request-btn">+ Request</button>
-                    </div>
+             data-source-id="${escapeHtml(item.source_id)}">
+            <div class="movie-poster">
+                ${poster}
+                <div class="movie-poster-overlay"></div>
+            </div>
+            <div class="movie-details">
+                <h3 class="movie-title">${escapeHtml(title)}</h3>
+                <div class="movie-meta">${meta.join('')}</div>
+                ${author}
+                ${summary}
+                <div class="movie-actions">
+                    <button class="movie-action-btn cf-request-btn">
+                        <span class="material-icons">add</span>
+                        <span>Request</span>
+                    </button>
                 </div>
             </div>
         </div>`;
 }
 
 function renderEmpty(msg) {
-    return '<div class="progress-card cf-empty">' + escapeHtml(msg) + '</div>';
+    return `
+        <div class="movie-history-empty-message">
+            <div class="empty-message-icon"><span class="material-icons">explore</span></div>
+            <h3 class="empty-message-title">Nothing to show</h3>
+            <p class="empty-message-subtitle">${escapeHtml(msg || '')}</p>
+        </div>`;
 }
 
 function renderLoading(msg) {
-    return '<div class="progress-card cf-loading">' + escapeHtml(msg || 'Loading…') + '</div>';
+    return '<div class="movie-history-empty-message"><div class="empty-message-icon"><span class="material-icons">hourglass_top</span></div><p class="empty-message-subtitle">' + escapeHtml(msg || 'Loading…') + '</p></div>';
 }
 
 function renderError(err) {
-    return '<div class="progress-card cf-error">Error: ' + escapeHtml(err.message || String(err)) + '</div>';
+    return '<div class="movie-history-empty-message"><div class="empty-message-icon"><span class="material-icons">error_outline</span></div><h3 class="empty-message-title">Error</h3><p class="empty-message-subtitle">' + escapeHtml(err.message || String(err)) + '</p></div>';
+}
+
+function renderPagination(page, totalPages, position) {
+    if (totalPages <= 1) return '';
+    const cls = position === 'top' ? 'pagination pagination-top' : 'pagination pagination-bottom';
+    const btn = (label, target, disabled, active) => {
+        const c = ['pagination-btn'];
+        if (active) c.push('active');
+        if (disabled) c.push('disabled');
+        return `<button class="${c.join(' ')}" data-page="${target}"${disabled ? ' disabled' : ''}>${label}</button>`;
+    };
+    const pages = [];
+    const window = 2;
+    const start = Math.max(1, page - window);
+    const end = Math.min(totalPages, page + window);
+    if (start > 1) pages.push(1);
+    if (start > 2) pages.push('…');
+    for (let p = start; p <= end; p++) pages.push(p);
+    if (end < totalPages - 1) pages.push('…');
+    if (end < totalPages) pages.push(totalPages);
+    const pageHtml = pages.map(p =>
+        p === '…' ? '<span class="pagination-ellipsis">…</span>' : btn(String(p), p, false, p === page)
+    ).join('');
+    return `
+        <div class="${cls}">
+            <div class="pagination-info">Page ${page} of ${totalPages}</div>
+            <div class="pagination-controls">
+                ${btn('<span class="material-icons">chevron_left</span>', page - 1, page <= 1)}
+                <div class="pagination-pages">${pageHtml}</div>
+                ${btn('<span class="material-icons">chevron_right</span>', page + 1, page >= totalPages)}
+            </div>
+        </div>`;
 }
 
 // ----- request CTA ----------------------------------------------------
@@ -100,100 +140,190 @@ async function handleRequest(card, msg) {
         msg.textContent = 'Added to watchlist.';
         const btn = card.querySelector('.cf-request-btn');
         if (btn) {
-            btn.textContent = '✓ Requested';
+            btn.innerHTML = '<span class="material-icons">check</span><span>Requested</span>';
             btn.disabled = true;
-            btn.classList.add('cf-requested');
+            btn.classList.add('favorited');
         }
     } catch (err) {
         msg.textContent = 'Error: ' + (err.message || String(err));
     }
 }
 
+// ----- shared paginated grid ------------------------------------------
+
+function setupPaginatedGrid(host, items, msg) {
+    let page = 1;
+    const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+    const grid = host.querySelector('.cf-grid');
+    const pagTop = host.querySelector('.cf-pagination-top');
+    const pagBottom = host.querySelector('.cf-pagination-bottom');
+
+    function paint() {
+        const slice = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+        grid.innerHTML = slice.length
+            ? slice.map(renderCard).join('')
+            : renderEmpty('Nothing here yet.');
+        // Stash full item on each card for the request CTA.
+        grid.querySelectorAll('.movie-card[data-source-id]').forEach((card, i) => {
+            try { card.dataset.payload = JSON.stringify(slice[i]); } catch (_) {}
+        });
+        pagTop.innerHTML    = renderPagination(page, totalPages, 'top');
+        pagBottom.innerHTML = renderPagination(page, totalPages, 'bottom');
+    }
+
+    [pagTop, pagBottom].forEach((p) => {
+        p.addEventListener('click', (e) => {
+            const btn = e.target.closest('button.pagination-btn');
+            if (!btn || btn.classList.contains('disabled') || btn.classList.contains('active')) return;
+            const target = parseInt(btn.dataset.page, 10);
+            if (!Number.isFinite(target)) return;
+            page = target;
+            paint();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    });
+
+    grid.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.cf-request-btn');
+        if (!btn) return;
+        const card = btn.closest('.movie-card[data-source-id]');
+        if (card) await handleRequest(card, msg);
+    });
+
+    paint();
+}
+
 // ----- tab content renderers ------------------------------------------
 
-async function renderTrending(host) {
-    host.innerHTML = `
-        <div class="cf-row">
-            <h2 class="sectionTitle sectionTitle-cards">Trending Books</h2>
-            <div class="cf-cards cf-trending-books">${renderLoading()}</div>
-        </div>
-        <div class="cf-row">
-            <h2 class="sectionTitle sectionTitle-cards">Trending Comics</h2>
-            <div class="cf-cards cf-trending-comics">${renderLoading()}</div>
-        </div>`;
-    await Promise.all([
-        loadInto(host.querySelector('.cf-trending-books'),  () => api.discoverTrending('book',  20)),
-        loadInto(host.querySelector('.cf-trending-comics'), () => api.discoverTrending('comic', 20)),
-    ]);
-}
+const SHELL = `
+    <div class="cf-pagination-top"></div>
+    <div class="paginated-container">
+        <div class="movie-history-grid cf-grid"></div>
+    </div>
+    <div class="cf-pagination-bottom"></div>`;
 
-async function renderComingSoon(host) {
+async function renderTrending(host, msg) {
+    msg.textContent = '';
     host.innerHTML = `
-        <div class="cf-row">
-            <h2 class="sectionTitle sectionTitle-cards">Coming Soon — From Your Watchlist</h2>
-            <div class="cf-cards cf-coming-soon">${renderLoading()}</div>
-        </div>`;
-    await loadInto(host.querySelector('.cf-coming-soon'), () => api.discoverComingSoon(40));
-}
-
-async function renderSearch(host) {
-    host.innerHTML = `
-        <div class="cf-search-bar">
-            <div class="inputContainer flex-grow cf-search-wrap">
-                <input is="emby-input" type="search" class="emby-input cf-search-input"
-                       placeholder="Search books and comics…" autocomplete="off" />
+        <div class="watchlist-header tab-header">
+            <h2 class="cf-page-title">Trending</h2>
+            <div class="watchlist-header-stats-container">
+                <div class="watchlist-header-stats cf-stats-books">— books</div>
+                <div class="watchlist-header-stats cf-stats-comics">— comics</div>
             </div>
-            <div class="selectContainer selectContainer-inline">
-                <label class="selectLabel" for="cf-search-kind">Kind</label>
-                <select is="emby-select" id="cf-search-kind" class="emby-select-withcolor cf-search-kind">
+        </div>
+
+        <div class="cf-trending-row" data-row="books">
+            <h3 class="sectionTitle sectionTitle-cards" style="margin: 1.2em 0 0.4em;">Trending Books</h3>
+            ${SHELL.replace('cf-grid', 'cf-grid cf-grid-books')}
+        </div>
+        <div class="cf-trending-row" data-row="comics">
+            <h3 class="sectionTitle sectionTitle-cards" style="margin: 1.2em 0 0.4em;">Trending Comics</h3>
+            ${SHELL.replace('cf-grid', 'cf-grid cf-grid-comics')}
+        </div>`;
+
+    try {
+        const [books, comics] = await Promise.all([
+            api.discoverTrending('book', 30).catch(() => ({ items: [] })),
+            api.discoverTrending('comic', 30).catch(() => ({ items: [] })),
+        ]);
+        const bItems = books.items || [];
+        const cItems = comics.items || [];
+        host.querySelector('.cf-stats-books').textContent  = bItems.length + ' books';
+        host.querySelector('.cf-stats-comics').textContent = cItems.length + ' comics';
+        setupPaginatedGrid(host.querySelector('[data-row="books"]'),  bItems,  msg);
+        setupPaginatedGrid(host.querySelector('[data-row="comics"]'), cItems, msg);
+    } catch (err) {
+        host.innerHTML = renderError(err);
+    }
+}
+
+async function renderComingSoon(host, msg) {
+    msg.textContent = '';
+    host.innerHTML = `
+        <div class="watchlist-header tab-header">
+            <h2 class="cf-page-title">Coming Soon — From Your Watchlist</h2>
+            <div class="watchlist-header-stats-container">
+                <div class="watchlist-header-stats cf-stats-total">— upcoming</div>
+            </div>
+        </div>
+        ${SHELL}`;
+
+    try {
+        const data = await api.discoverComingSoon(60);
+        const items = data.items || [];
+        host.querySelector('.cf-stats-total').textContent = items.length + ' upcoming';
+        setupPaginatedGrid(host, items, msg);
+    } catch (err) {
+        host.innerHTML = renderError(err);
+    }
+}
+
+async function renderSearch(host, msg) {
+    msg.textContent = '';
+    host.innerHTML = `
+        <div class="watchlist-header tab-header">
+            <h2 class="cf-page-title">Search</h2>
+            <div class="watchlist-header-right">
+                <select class="sort-button cf-search-kind">
                     <option value="">All</option>
                     <option value="book">Books</option>
                     <option value="comic">Comics</option>
                 </select>
             </div>
-            <button is="emby-button" type="button" class="raised button-flat cf-search-go">
-                <span class="material-icons" aria-hidden="true">search</span>
-                <span>Search</span>
-            </button>
         </div>
-        <div class="cf-cards cf-search-results">
-            <div class="progress-card cf-empty">Type to search across books and comics.</div>
-        </div>`;
+        <div class="search-container">
+            <div class="search-input-wrapper">
+                <span class="material-icons search-icon">search</span>
+                <input type="search" class="search-input cf-search-input" placeholder="Search books and comics…" autocomplete="off" />
+            </div>
+        </div>
+        ${SHELL}`;
 
-    const input  = host.querySelector('.cf-search-input');
-    const kind   = host.querySelector('.cf-search-kind');
-    const goBtn  = host.querySelector('.cf-search-go');
-    const results = host.querySelector('.cf-search-results');
+    const grid    = host.querySelector('.cf-grid');
+    const pagTop  = host.querySelector('.cf-pagination-top');
+    const pagBot  = host.querySelector('.cf-pagination-bottom');
+    const input   = host.querySelector('.cf-search-input');
+    const kindEl  = host.querySelector('.cf-search-kind');
+
+    grid.innerHTML = renderEmpty('Type to search across books and comics.');
 
     let lastQuery = '';
     let inflight = 0;
+    let debounce;
 
     async function go() {
         const q = (input.value || '').trim();
         if (!q) {
-            results.innerHTML = '<div class="progress-card cf-empty">Type to search across books and comics.</div>';
+            grid.innerHTML = renderEmpty('Type to search across books and comics.');
+            pagTop.innerHTML = ''; pagBot.innerHTML = '';
             return;
         }
         if (q === lastQuery) return;
         lastQuery = q;
         const myToken = ++inflight;
-        results.innerHTML = renderLoading('Searching…');
+        grid.innerHTML = renderLoading('Searching…');
+        pagTop.innerHTML = ''; pagBot.innerHTML = '';
         try {
-            const data = await api.discoverSearch(q, kind.value || undefined, 30);
-            if (myToken !== inflight) return;  // newer search superseded
-            const items = data.items || data;
-            if (!items || !items.length) {
-                results.innerHTML = renderEmpty('No results.');
+            const data = await api.discoverSearch(q, kindEl.value || undefined, 60);
+            if (myToken !== inflight) return;
+            const items = data.items || [];
+            if (!items.length) {
+                grid.innerHTML = renderEmpty('No results.');
                 return;
             }
-            renderItemsInto(results, items);
+            // Re-use paginated grid for the search-results host.
+            const tempHost = document.createElement('div');
+            tempHost.innerHTML = `<div class="cf-pagination-top"></div><div class="paginated-container"><div class="movie-history-grid cf-grid"></div></div><div class="cf-pagination-bottom"></div>`;
+            // Replace the existing grid + pagination slots with the temp host's
+            grid.innerHTML = '';
+            setupPaginatedGridInline(host, items, msg);
         } catch (err) {
             if (myToken !== inflight) return;
-            results.innerHTML = renderError(err);
+            grid.innerHTML = renderError(err);
         }
     }
 
-    let debounce;
     input.addEventListener('input', () => {
         clearTimeout(debounce);
         debounce = setTimeout(go, 350);
@@ -201,50 +331,27 @@ async function renderSearch(host) {
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); clearTimeout(debounce); go(); }
     });
-    goBtn.addEventListener('click', () => { clearTimeout(debounce); go(); });
-    kind.addEventListener('change', () => { lastQuery = ''; go(); });
+    kindEl.addEventListener('change', () => { lastQuery = ''; go(); });
 }
 
-// ----- shared loaders --------------------------------------------------
-
-async function loadInto(el, fetcher) {
-    try {
-        const data = await fetcher();
-        const items = data.items || data;
-        if (!items || !items.length) {
-            el.innerHTML = renderEmpty('Nothing here yet.');
-            return;
-        }
-        renderItemsInto(el, items);
-    } catch (err) {
-        el.innerHTML = renderError(err);
-    }
-}
-
-function renderItemsInto(el, items) {
-    el.innerHTML = items.map(renderCard).join('');
-    // Stash the full item on each card so the request handler has everything.
-    el.querySelectorAll('.progress-card[data-source-id]').forEach((card, i) => {
-        try { card.dataset.payload = JSON.stringify(items[i]); } catch (_) {}
-    });
+function setupPaginatedGridInline(host, items, msg) {
+    setupPaginatedGrid(host, items, msg);
 }
 
 // ----- entry point -----------------------------------------------------
 
 export async function render(root) {
     ({ api } = await import('./api.js?cb=' + Date.now()));
+
     root.innerHTML = `
-        <div class="padded-left padded-right padded-top">
-            <h1 class="sectionTitle">Discover</h1>
-            <div class="cypherflix-discover">
-                <div class="watchlist-tabs cf-discover-tabs">
-                    ${SUB_TABS.map((t, i) => `
-                        <button data-tab="${t.id}" class="${i === 0 ? 'active' : ''}">${t.label}</button>
-                    `).join('')}
-                </div>
-                <div class="cf-toolbar">
-                    <span class="cf-status-msg"></span>
-                </div>
+        <div class="sections watchlist cypherflix-discover">
+            <div class="watchlist-tabs">
+                ${SUB_TABS.map((t, i) => `
+                    <button data-tab="${t.id}" class="${i === 0 ? 'active' : ''}">${t.label}</button>
+                `).join('')}
+            </div>
+            <div data-tab="discover-content" class="active">
+                <div class="cf-status-msg"></div>
                 <div class="cf-tab-host"></div>
             </div>
         </div>`;
@@ -253,29 +360,18 @@ export async function render(root) {
     const msg = root.querySelector('.cf-status-msg');
 
     async function activate(id) {
-        msg.textContent = '';
-        if (id === 'trending')   return renderTrending(tabHost);
-        if (id === 'comingSoon') return renderComingSoon(tabHost);
-        if (id === 'search')     return renderSearch(tabHost);
+        if (id === 'trending')   return renderTrending(tabHost, msg);
+        if (id === 'comingSoon') return renderComingSoon(tabHost, msg);
+        if (id === 'search')     return renderSearch(tabHost, msg);
     }
 
-    root.querySelectorAll('.cf-discover-tabs button').forEach((b) => {
+    root.querySelectorAll('.watchlist-tabs button').forEach((b) => {
         b.addEventListener('click', () => {
-            root.querySelectorAll('.cf-discover-tabs button').forEach((x) => x.classList.remove('active'));
+            root.querySelectorAll('.watchlist-tabs button').forEach((x) => x.classList.remove('active'));
             b.classList.add('active');
             void activate(b.dataset.tab);
         });
     });
 
-    // Click anywhere on the tab host — request button is delegated.
-    tabHost.addEventListener('click', async (e) => {
-        const btn = e.target.closest('.cf-request-btn');
-        if (!btn) return;
-        const card = btn.closest('.progress-card[data-source-id]');
-        if (!card) return;
-        await handleRequest(card, msg);
-    });
-
-    // Boot on the Trending tab.
     void activate('trending');
 }
