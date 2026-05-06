@@ -1,325 +1,357 @@
-/* Cypherflix Hub — page styles. We lean on Jellyfin's own classes wherever
-   possible (.detailTable, .raised, .button-flat, .cardBox, .listItem, etc).
-   These rules are minimal additions for things Jellyfin doesn't ship classes
-   for (status pills, custom row layouts), and they all source colour /
-   typography from Jellyfin's CSS variables so a theme switch flows through. */
+/* Cypherflix Hub — page styles.
+   Most card / tab / pagination styling cascades from KefinTweaks's
+   watchlist.css (we wrap content in .sections.watchlist-style markup
+   and reuse class names). This file adds:
+     - Glassmorphic backdrop matching Watchlist / Favourites
+     - Portrait posters per media type (smaller cards, more per row)
+     - Status pill overlay top-right of each Manage card
+     - Full-width search row
+     - Native <select> styled to match KefinTweaks's .sort-button look
+*/
 
-.cypherflixPage {
-    /* Lift above Jellyfin's .backgroundContainer (position:fixed inset:0 with
-       z-index:auto) — without this our content renders in DOM but is covered
-       by the backdrop layer. */
+/* ----- Host shell + glassmorphic backdrop ------------------------- */
+
+.sections.cypherflix-discover,
+.sections.cypherflix-manage {
+    /* The Custom Tabs body is our outer container; we add a glass layer
+       behind so the card grid sits on a frosted backdrop, matching
+       Jellyfin's Watchlist + Favourites tab feel. */
+    position: relative;
+    padding-top: 8px;
+    padding-bottom: 40px;
+}
+
+.sections.cypherflix-discover .cf-host,
+.sections.cypherflix-manage   .cf-host {
     position: relative;
     z-index: 1;
-    color: inherit;
 }
 
-.cypherflixPage h1,
-.cypherflixPage h2.sectionTitle {
-    font-weight: 400;
-    margin: 0 0 0.25em;
-}
-
-.cypherflixPage .cf-toolbar {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    margin-bottom: 0.75rem;
-}
-
-.cypherflixPage .cf-status-msg {
-    color: var(--theme-secondary-text-color, rgba(255, 255, 255, 0.7));
-    font-size: 0.85em;
-    margin-left: auto;
-}
-
-.cypherflixPage .cf-loading,
-.cypherflixPage .cf-empty,
-.cypherflixPage .cf-muted {
-    color: var(--theme-secondary-text-color, rgba(255, 255, 255, 0.7));
-}
-
-.cypherflixPage .cf-error {
-    color: #ff8b8b;
-}
-
-/* ----- request-status pills ----------------------------------------- */
-
-.cypherflixPage .cf-pill {
-    display: inline-block;
-    padding: 0.1em 0.6em;
-    border-radius: 9999px;
-    font-size: 0.78em;
-    line-height: 1.5;
-    background: rgba(255, 255, 255, 0.08);
-    color: inherit;
-}
-.cypherflixPage .cf-pill-done                                                    { background: rgba(34, 197, 94, 0.25);  color: #65f797; }
-.cypherflixPage .cf-pill-failed,
-.cypherflixPage .cf-pill-blocked                                                 { background: rgba(239, 68, 68, 0.25);  color: #ff8b8b; }
-.cypherflixPage .cf-pill-snatched,
-.cypherflixPage .cf-pill-downloading,
-.cypherflixPage .cf-pill-importing,
-.cypherflixPage .cf-pill-tagging                                                 { background: rgba(59, 130, 246, 0.25); color: #8ab4ff; }
-.cypherflixPage .cf-pill-wanted                                                  { background: rgba(234, 179, 8, 0.25);  color: #f5d774; }
-.cypherflixPage .cf-pill-searching                                               { background: rgba(168, 85, 247, 0.2);  color: #d3a3ff; }
-
-/* ----- request list — leans on Jellyfin's .paperList / .listItem ----- */
-/* Jellyfin's listItem already provides the row layout, hover, and
-   secondary-text styling. We only fine-tune the actions column on the
-   right edge so the icon buttons sit flush. */
-
-.cypherflixPage .cf-actions {
-    display: flex;
-    align-items: center;
-    white-space: nowrap;
-}
-.cypherflixPage .cf-actions button + button { margin-left: 0.15rem; }
-
-.cypherflixPage .cf-status-cell {
-    display: flex;
-    align-items: center;
-    margin-right: 0.75rem;
-}
-
-/* ----- Manage status badges --------------------------------------- */
-/* KefinTweaks ships .completion-badge (green) for "done"; we add the
-   other states using its visual language so the chip beside the title
-   reads consistently with native Watchlist styling. */
-.cypherflixPage .cf-status-badge {
-    color: #fff;
-    font-size: 12px;
-    font-weight: 500;
-    padding: 4px 8px;
+.cf-glass-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: linear-gradient(180deg,
+        rgba(20, 24, 38, 0.55) 0%,
+        rgba(15, 17, 28, 0.75) 100%);
+    backdrop-filter: blur(24px) saturate(140%);
+    -webkit-backdrop-filter: blur(24px) saturate(140%);
     border-radius: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    background: rgba(255, 255, 255, 0.15);
-}
-.cypherflixPage .cf-status-badge-wanted        { background: #eab308; color: #1c1c1c; }
-.cypherflixPage .cf-status-badge-searching     { background: #a855f7; }
-.cypherflixPage .cf-status-badge-snatched,
-.cypherflixPage .cf-status-badge-downloading,
-.cypherflixPage .cf-status-badge-importing,
-.cypherflixPage .cf-status-badge-tagging       { background: #3b82f6; }
-.cypherflixPage .cf-status-badge-failed,
-.cypherflixPage .cf-status-badge-blocked       { background: #ef4444; }
-
-/* Match the green-border treatment KefinTweaks uses for completed cards
-   but in red for failed/blocked requests. */
-.cypherflixPage .progress-card.cf-card-failed {
-    border-left: 4px solid #ef4444;
-    background: rgba(239, 68, 68, 0.05);
-}
-.cypherflixPage .progress-card.cf-card-failed:hover {
-    background: rgba(239, 68, 68, 0.08);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
 }
 
-.cypherflixPage .cf-page-title {
+.cf-host-inner {
+    position: relative;
+    z-index: 2;
+    padding: 12px 16px 0;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* ----- Tabs row tweaks (status / discover sub-tabs) --------------- */
+
+.cf-status-tabs,
+.cf-discover-tabs {
+    /* KefinTweaks scopes tab styling to `.sections.watchlist .watchlist-tabs`
+       — our wrapper isn't `.sections.watchlist` so we restate the look
+       here (centred pills with bottom border highlight). */
+    display: flex;
+    gap: 8px;
+    padding: 0 16px 4px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    justify-content: center;
+    margin-bottom: 8px;
+}
+
+.cf-status-tabs button,
+.cf-discover-tabs button {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.7);
+    padding: 12px 16px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s ease;
+    border-radius: 10px 10px 0 0;
+    font-family: inherit;
+}
+
+.cf-status-tabs button:hover,
+.cf-discover-tabs button:hover {
+    color: rgba(200, 200, 200, 0.9);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.cf-status-tabs button.active,
+.cf-discover-tabs button.active {
+    color: #fff;
+    border-bottom-color: #fff;
+    background: rgba(200, 200, 200, 0.1);
+}
+
+/* ----- Header / title row ----------------------------------------- */
+
+.cf-page-title {
     font-size: 24px;
     font-weight: 600;
     color: #fff;
     margin: 0;
 }
 
-.cypherflixPage .cf-status-msg {
+.cf-status-msg {
     color: rgba(255, 255, 255, 0.7);
     font-size: 13px;
     margin: 0.5rem 1rem;
     min-height: 1.4em;
 }
 
-.cypherflixPage .cf-status-reason {
-    color: #ff8b8b;
+/* ----- Full-width search row -------------------------------------- */
+/* KefinTweaks ships a max-width:400px centred pill — we want a full-width
+   bar across the content. */
+
+.cf-search-row {
+    position: relative;
+    margin: 16px 16px 20px;
 }
 
-/* Native <select> needs a tiny tweak to match KefinTweaks's .sort-button
-   look — they apply the styling via class but native <select> ignores
-   some CSS, so we kill the default appearance. */
-.cypherflixPage select.sort-button {
+.cf-search-row .cf-search-icon {
+    position: absolute;
+    top: 50%;
+    left: 16px;
+    transform: translateY(-50%);
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 22px;
+    pointer-events: none;
+}
+
+.cf-search-fullwidth {
+    width: 100%;
+    height: 44px;
+    padding: 0 16px 0 48px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 10px;
+    color: #fff;
+    font-size: 15px;
+    outline: none;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+}
+
+.cf-search-fullwidth::placeholder {
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.cf-search-fullwidth:focus {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.4);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+}
+
+/* ----- Styled <select> --------------------------------------------- */
+/* Native select dropdowns can't be styled cross-browser — we kill the
+   default chrome and fake the chevron so it matches KefinTweaks's
+   .sort-button visual. */
+
+.cf-styled-select {
     appearance: none;
     -webkit-appearance: none;
     -moz-appearance: none;
-    padding-right: 28px;
-    background-image:
-        linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.7) 50%),
-        linear-gradient(135deg, rgba(255,255,255,0.7) 50%, transparent 50%);
-    background-position: calc(100% - 14px) center, calc(100% - 9px) center;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    color: #fff;
+    padding: 8px 32px 8px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background-image: linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.7) 50%),
+                      linear-gradient(135deg, rgba(255,255,255,0.7) 50%, transparent 50%);
+    background-position: calc(100% - 16px) center, calc(100% - 11px) center;
     background-size: 5px 5px, 5px 5px;
     background-repeat: no-repeat;
 }
 
-/* Card poster — fall back to material icon when no cover_url is available.
-   Keeps the slot occupied with the same dimensions KefinTweaks Watchlist's
-   .progress-poster expects. */
-.cypherflixPage .cf-progress-poster img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: inherit;
-    display: block;
+.cf-styled-select:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.35);
 }
-.cypherflixPage .cf-poster-fallback {
-    width: 100%;
-    height: 100%;
-    display: flex;
+
+.cf-styled-select:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.45);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+}
+
+/* The OS-rendered <option> menu can't be styled, but we can at least
+   give it a sensible dark background so it doesn't flash white. */
+.cf-styled-select option {
+    background: #1c1f29;
+    color: #fff;
+}
+
+.cf-icon-button {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #fff;
+    border-radius: 6px;
+    width: 38px;
+    height: 38px;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 3rem;
-    color: var(--theme-secondary-text-color, rgba(255, 255, 255, 0.4));
-    background: var(--card-bg-color, rgba(255, 255, 255, 0.06));
-    border-radius: inherit;
+    cursor: pointer;
+    transition: all 0.2s ease;
 }
 
-/* Summary line on Discover cards — KefinTweaks's .progress-last-watched
-   already styles this; we just clamp to a few lines so cards stay even. */
-.cypherflixPage .cf-summary {
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    margin-top: 0.25em;
+.cf-icon-button:hover {
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(255, 255, 255, 0.35);
 }
 
-/* Manage and Discover sub-tabs — match KefinTweaks .watchlist-tabs spacing
-   when the host plugin's CSS isn't loaded. */
-.cypherflixPage .cf-status-tabs,
-.cypherflixPage .cf-discover-tabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-    margin: 0.5rem 0;
+/* ----- Card grid: portrait posters, smaller cells, more per row --- */
+
+.cf-card-grid.movie-history-grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 16px;
 }
 
-.cypherflixPage .cf-toolbar {
-    margin-top: 0.4rem;
-}
-
-/* Discover horizontal card row — matches the home-page carousel feel
-   without depending on Jellyfin's cardBuilder. */
-.cypherflixPage .cf-row { margin-bottom: 1.6rem; }
-.cypherflixPage .cf-row .cf-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
-    gap: 0.8rem;
-}
-
-.cypherflixPage .cf-search-bar {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-    margin-bottom: 0.8rem;
-}
-.cypherflixPage .cf-search-wrap { flex: 1; min-width: 14rem; }
-
-.cypherflixPage .cf-request-btn.cf-requested {
-    color: var(--theme-secondary-text-color, rgba(255, 255, 255, 0.5));
-    cursor: default;
-}
-
-/* ----- discover horizontal scrollers --------------------------------- */
-/* Jellyfin's home page renders horizontal carousels with .padded-left,
-   .sectionTitle, and .itemsContainer.scrollX.  We mirror that here so the
-   visual rhythm matches the rest of the SPA. */
-
-.cypherflixPage .cf-row {
-    margin-bottom: 1.6rem;
-}
-
-.cypherflixPage .cf-row .sectionTitle {
-    margin: 0 0 0.4rem;
-}
-
-.cypherflixPage .cf-scroller {
-    display: flex;
-    gap: 0.6rem;
-    overflow-x: auto;
-    scroll-snap-type: x proximity;
-    padding-bottom: 0.4rem;
-}
-
-.cypherflixPage .cf-card {
-    flex: 0 0 auto;
-    width: 9.6rem;
-    scroll-snap-align: start;
-    background: transparent;
-    color: inherit;
-    display: flex;
-    flex-direction: column;
-}
-
-.cypherflixPage .cf-card .cf-cover {
-    width: 100%;
+/* Portrait poster — overrides KefinTweaks's 16:9 movie-poster ratio so
+   books and comics show their full cover art at native 2:3. */
+.cf-portrait-poster.movie-poster {
     aspect-ratio: 2 / 3;
-    background-color: var(--card-bg-color, rgba(255, 255, 255, 0.08));
-    background-size: cover;
-    background-position: center;
-    border-radius: 0.25rem;
-    overflow: hidden;
-    position: relative;
 }
 
-.cypherflixPage .cf-card .cf-cover .cf-cover-fallback {
+.cf-portrait-poster.movie-poster img {
+    object-fit: cover;
+}
+
+/* When there's no cover (wanted items pre-enrichment) the placeholder
+   shouldn't dominate — keep it readable. */
+.cf-portrait-poster .movie-poster-placeholder .material-icons {
+    font-size: 56px;
+}
+
+/* ----- Status pill — top-right of card poster --------------------- */
+
+.cf-status-overlay {
     position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--theme-secondary-text-color, rgba(255, 255, 255, 0.4));
-    font-size: 2.5rem;
+    top: 8px;
+    right: 8px;
+    z-index: 5;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
 }
 
-.cypherflixPage .cf-card .cf-card-body {
-    padding: 0.4rem 0.1rem 0.2rem;
+.cf-status-overlay-wanted        { background: rgba(234, 179, 8, 0.92); color: #1c1c1c; }
+.cf-status-overlay-searching     { background: rgba(168, 85, 247, 0.92); }
+.cf-status-overlay-snatched,
+.cf-status-overlay-downloading,
+.cf-status-overlay-importing,
+.cf-status-overlay-tagging       { background: rgba(59, 130, 246, 0.92); }
+.cf-status-overlay-done          { background: rgba(76, 175, 80, 0.92); }
+.cf-status-overlay-failed,
+.cf-status-overlay-blocked       { background: rgba(239, 68, 68, 0.92); }
+
+/* Make the .movie-poster the positioning context for the overlay (it's
+   already position:relative per KefinTweaks). */
+.cf-card .movie-poster {
+    position: relative;
+    overflow: hidden;
+}
+
+/* ----- Card body content ------------------------------------------ */
+
+.cf-card .movie-details {
+    padding: 12px 14px;
     display: flex;
     flex-direction: column;
-    gap: 0.15rem;
-    flex: 1;
+    gap: 4px;
 }
 
-.cypherflixPage .cf-card .cf-card-title {
-    font-size: 0.92rem;
-    line-height: 1.2;
-    overflow: hidden;
+.cf-card .movie-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+    margin: 0 0 2px;
+    line-height: 1.3;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
-.cypherflixPage .cf-card .cf-card-sub {
-    font-size: 0.78rem;
-    color: var(--theme-secondary-text-color, rgba(255, 255, 255, 0.6));
+.cf-card .cf-card-subtitle {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.cypherflixPage .cf-card .cf-card-cta {
-    margin-top: 0.35rem;
-}
-
-.cypherflixPage .cf-card .cf-card-cta .emby-button,
-.cypherflixPage .cf-card .cf-card-cta button {
-    width: 100%;
-    font-size: 0.78rem;
-    padding: 0.3rem 0.4rem;
-}
-
-/* ----- discover search -------------------------------------------- */
-
-.cypherflixPage .cf-search-bar {
+.cf-card .movie-meta {
     display: flex;
-    gap: 0.5rem;
-    align-items: center;
-    margin: 0 0 1rem;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 4px 0 0;
+    font-size: 12px;
 }
 
-.cypherflixPage .cf-search-bar .cf-search-input {
+.cf-card .cf-card-summary {
+    margin-top: 6px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.65);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.cf-card .cf-card-reason {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #ff8b8b;
+    font-style: italic;
+}
+
+.cf-card .movie-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.cf-card .movie-action-btn {
+    padding: 6px 8px;
+    font-size: 11px;
     flex: 1;
+    justify-content: center;
 }
 
-.cypherflixPage .cf-search-results {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(9.6rem, 1fr));
-    gap: 0.8rem 0.6rem;
+/* ----- Empty state polish ----------------------------------------- */
+
+.movie-history-empty-message {
+    grid-column: 1 / -1;
+}
+
+/* Reduce spacing on small screens so cards stay tappable. */
+@media (max-width: 640px) {
+    .cf-card-grid.movie-history-grid {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 10px;
+    }
+    .cf-card .movie-title { font-size: 14px; }
+    .cf-card .cf-card-summary { -webkit-line-clamp: 3; }
 }

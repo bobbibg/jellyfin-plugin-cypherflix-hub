@@ -1,20 +1,24 @@
-// Manage view — visually parallels KefinTweaks Watchlist > Series Progress.
-// Wraps in .sections.watchlist so KefinTweaks's CSS styles us; uses
-// .watchlist-tabs / .watchlist-header.tab-header / .progress-card patterns
-// verbatim. KefinTweaks's JS only fires on #/home routes so it won't try
-// to render into our slot.
+// Manage view — visually mirrors Watchlist's Movie History grid.
+// Renders into a Custom Tab anchor div (.sections.cypherflix-manage). The
+// outer .sections.watchlist class on the parent inherits KefinTweaks's
+// styling for tabs / cards / pagination / search.
 //
-// Imports happen INSIDE render() with a cache-buster so plugin upgrades
-// reliably evict stale module instances.
+// 5 status buckets:
+//   Wanted (incl. failed/blocked so admin can retry) → wanted/failed/blocked
+//   Downloading                                       → searching/snatched/downloading
+//   Downloaded                                        → importing
+//   Enriching   (queue for metadata enrichment)        → tagging
+//   Complete                                           → done
+
 let api;
 let isCurrentUserAdmin;
 
 const STATUS_TABS = [
-    { id: 'wanted',     label: 'Wanted',      statuses: ['wanted'] },
-    { id: 'inProgress', label: 'In progress', statuses: ['searching', 'snatched', 'downloading', 'importing', 'tagging'] },
-    { id: 'done',       label: 'Done',        statuses: ['done'] },
-    { id: 'issues',     label: 'Issues',      statuses: ['failed', 'blocked'] },
-    { id: 'all',        label: 'All',         statuses: null },
+    { id: 'wanted',      label: 'Wanted',      statuses: ['wanted', 'failed', 'blocked'] },
+    { id: 'downloading', label: 'Downloading', statuses: ['searching', 'snatched', 'downloading'] },
+    { id: 'downloaded',  label: 'Downloaded',  statuses: ['importing'] },
+    { id: 'enriching',   label: 'Enriching',   statuses: ['tagging'] },
+    { id: 'complete',    label: 'Complete',    statuses: ['done'] },
 ];
 
 const KINDS = [
@@ -24,7 +28,7 @@ const KINDS = [
     { value: 'audiobook',   label: 'Audiobooks' },
 ];
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 24;
 
 function escapeHtml(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
@@ -37,108 +41,88 @@ function fmtDate(s) {
     try { return new Date(s).toLocaleDateString(); } catch (_) { return s; }
 }
 
-function fmtDateTime(s) {
-    if (!s) return '';
-    try { return new Date(s).toLocaleString(); } catch (_) { return s; }
+function statusOverlay(status) {
+    const cls = 'cf-status-overlay cf-status-overlay-' + status;
+    return '<div class="' + cls + '">' + status.toUpperCase() + '</div>';
 }
 
-// Map our DB status onto a progress-card colour class. KefinTweaks ships
-// progress-card-completed (green); we add custom modifiers for the other
-// states using KefinTweaks's colour palette.
-function statusModifierClass(status) {
-    if (status === 'done')      return 'progress-card-completed';
-    if (status === 'failed' || status === 'blocked') return 'cf-card-failed';
-    return '';
-}
-
-function statusBadge(status) {
-    if (status === 'done') {
-        return '<span class="completion-badge">✓ ' + status.toUpperCase() + '</span>';
-    }
-    return '<span class="cf-status-badge cf-status-badge-' + status + '">' + status.toUpperCase() + '</span>';
-}
-
-function progressBar(pct, status) {
-    const bar = pct == null ? null : Math.max(0, Math.min(100, Math.round(pct)));
-    const completed = status === 'done';
-    const wrapClass = 'progress-bar' + (completed ? ' progress-bar-completed' : '');
-    const fillStyle = bar == null ? 'width: 0%' : 'width: ' + bar + '%';
-    return `
-        <div class="progress-bar-container">
-            <div class="${wrapClass}">
-                <div class="progress-bar-fill" style="${fillStyle}"></div>
-            </div>
-        </div>`;
+function kindIcon(kind) {
+    if (kind === 'book')         return 'menu_book';
+    if (kind === 'comic_issue')  return 'auto_stories';
+    if (kind === 'audiobook')    return 'headphones';
+    return 'collections_bookmark';
 }
 
 function primaryTitle(r) {
     const parts = [];
     if (r.series_name) parts.push(r.series_name);
     if (r.issue_number) parts.push('#' + r.issue_number);
-    if (parts.length) return parts.join(' ');
-    return r.title || '(untitled)';
+    return parts.length ? parts.join(' ') : (r.title || '(untitled)');
 }
 
 function renderCard(r, isAdmin) {
-    const mod   = statusModifierClass(r.status);
-    const stats = [];
-    if (r.title && r.title !== r.series_name) stats.push('<strong>' + escapeHtml(r.title) + '</strong>');
-    if (r.series_year)  stats.push(escapeHtml(String(r.series_year)));
-    if (r.release_date) stats.push('Released ' + escapeHtml(fmtDate(r.release_date)));
-    if (r.authors)      stats.push(escapeHtml(r.authors));
+    const meta = [];
+    if (r.series_year)  meta.push('<span class="movie-year">' + escapeHtml(String(r.series_year)) + '</span>');
+    if (r.release_date) meta.push('<span class="movie-runtime"><span class="material-icons">event</span>' + escapeHtml(fmtDate(r.release_date)) + '</span>');
 
-    const reasonLine = r.status_reason
-        ? '<div class="progress-last-watched cf-status-reason"><strong>Reason:</strong> ' + escapeHtml(r.status_reason) + '</div>'
+    // Subtitle — issue title or book title where it differs from series.
+    const subtitleLine = r.title && r.title !== r.series_name
+        ? '<div class="cf-card-subtitle">' + escapeHtml(r.title) + '</div>'
         : '';
 
-    const lastUpdated = r.updated_at
-        ? '<div class="progress-last-watched">Last update: ' + escapeHtml(fmtDateTime(r.updated_at)) + '</div>'
+    // Description: show summary when present (especially valuable for
+    // wanted items that don't have covers yet).
+    const summary = r.summary
+        ? '<div class="cf-card-summary">' + escapeHtml(r.summary.slice(0, 220)) + (r.summary.length > 220 ? '…' : '') + '</div>'
+        : '';
+
+    const reasonLine = r.status_reason
+        ? '<div class="cf-card-reason">' + escapeHtml(r.status_reason) + '</div>'
         : '';
 
     const adminActions = isAdmin ? `
-        <div class="progress-actions">
-            <button class="action-link cf-retry"        title="Reset to wanted">+ Retry</button>
-            <button class="action-link cf-refresh-meta" title="Refresh metadata from providers">+ Refresh metadata</button>
-            <button class="action-link cf-regrab"       title="Delete file and re-search">+ Re-grab</button>
+        <div class="movie-actions">
+            <button class="movie-action-btn cf-retry"        title="Reset to wanted"><span class="material-icons">replay</span></button>
+            <button class="movie-action-btn cf-refresh-meta" title="Refresh metadata"><span class="material-icons">cloud_sync</span></button>
+            <button class="movie-action-btn cf-regrab"       title="Re-grab"><span class="material-icons">file_download</span></button>
         </div>` : '';
 
     const poster = r.cover_url
         ? '<img src="' + escapeHtml(r.cover_url) + '" alt="" loading="lazy" />'
-        : '<div class="movie-poster-placeholder"><span class="material-icons">' + (r.kind === 'book' ? 'menu_book' : r.kind === 'audiobook' ? 'headphones' : 'auto_stories') + '</span></div>';
+        : '<div class="movie-poster-placeholder"><span class="material-icons">' + kindIcon(r.kind) + '</span></div>';
 
     return `
-        <div class="progress-card ${mod}" data-id="${r.id}">
-            <div class="progress-card-content">
-                <div class="progress-poster">${poster}</div>
-                <div class="progress-details">
-                    <div class="progress-header">
-                        <h3 class="progress-title">${escapeHtml(primaryTitle(r))} ${statusBadge(r.status)}</h3>
-                    </div>
-                    ${r.progress_pct != null ? progressBar(r.progress_pct, r.status) : ''}
-                    <div class="progress-stats">${stats.join(' <span class="progress-stats-separator">·</span> ')}</div>
-                    ${lastUpdated}
-                    ${reasonLine}
-                    ${adminActions}
-                </div>
+        <div class="movie-card cf-card cf-card-${r.kind} cf-card-status-${r.status}" data-id="${r.id}">
+            <div class="movie-poster cf-portrait-poster">
+                ${poster}
+                <div class="movie-poster-overlay">${statusOverlay(r.status)}</div>
+            </div>
+            <div class="movie-details">
+                <h3 class="movie-title">${escapeHtml(primaryTitle(r))}</h3>
+                ${subtitleLine}
+                <div class="movie-meta">${meta.join('')}</div>
+                ${summary}
+                ${reasonLine}
+                ${adminActions}
             </div>
         </div>`;
 }
 
 function renderEmpty(msg) {
     return `
-        <div class="progress-empty-message">
+        <div class="movie-history-empty-message">
             <div class="empty-message-icon"><span class="material-icons">inbox</span></div>
             <h3 class="empty-message-title">No requests in this view</h3>
-            <p class="empty-message-subtitle">${escapeHtml(msg || 'Try a different filter or kind.')}</p>
+            <p class="empty-message-subtitle">${escapeHtml(msg || 'Try a different bucket or kind.')}</p>
         </div>`;
 }
 
 function renderLoading() {
-    return '<div class="progress-empty-message"><div class="empty-message-icon"><span class="material-icons">hourglass_top</span></div><p class="empty-message-subtitle">Loading…</p></div>';
+    return '<div class="movie-history-empty-message"><div class="empty-message-icon"><span class="material-icons">hourglass_top</span></div><p class="empty-message-subtitle">Loading…</p></div>';
 }
 
 function renderError(err) {
-    return '<div class="progress-empty-message"><div class="empty-message-icon"><span class="material-icons">error_outline</span></div><h3 class="empty-message-title">Error</h3><p class="empty-message-subtitle">' + escapeHtml(err.message || String(err)) + '</p></div>';
+    return '<div class="movie-history-empty-message"><div class="empty-message-icon"><span class="material-icons">error_outline</span></div><h3 class="empty-message-title">Error</h3><p class="empty-message-subtitle">' + escapeHtml(err.message || String(err)) + '</p></div>';
 }
 
 function renderPagination(page, totalPages, position) {
@@ -150,7 +134,6 @@ function renderPagination(page, totalPages, position) {
         if (disabled) c.push('disabled');
         return `<button class="${c.join(' ')}" data-page="${target}"${disabled ? ' disabled' : ''}>${label}</button>`;
     };
-    // Window of pages around the current one
     const pages = [];
     const window = 2;
     const start = Math.max(1, page - window);
@@ -186,46 +169,44 @@ export async function render(root) {
     let currentPage = 1;
     let allItems = [];
 
+    root.classList.add('cf-host');
     root.innerHTML = `
-        <div class="sections watchlist cypherflix-manage">
-            <div class="watchlist-tabs">
+        <div class="cf-glass-backdrop"></div>
+        <div class="cf-host-inner">
+            <div class="watchlist-tabs cf-status-tabs">
                 ${STATUS_TABS.map((t, i) => `
                     <button data-tab="${t.id}" class="${i === 0 ? 'active' : ''}">${t.label}</button>
                 `).join('')}
             </div>
 
-            <div data-tab="manage-content" class="active">
-                <div class="watchlist-header tab-header">
-                    <h2 class="cf-page-title">Manage Requests</h2>
-                    <div class="watchlist-header-stats-container">
-                        <div class="watchlist-header-stats cf-stats-total">— total</div>
-                        <div class="watchlist-header-stats cf-stats-tab">— in view</div>
-                    </div>
-                    <div class="watchlist-header-right">
-                        <select class="sort-button cf-kind">
-                            ${KINDS.map(k => '<option value="' + k.value + '">' + k.label + '</option>').join('')}
-                        </select>
-                        <button class="sort-button cf-refresh" title="Refresh">
-                            <span class="material-icons">refresh</span>
-                        </button>
-                        ${isAdmin ? '<button class="sort-button cf-sweep" title="Trigger sweep"><span class="material-icons">play_arrow</span><span class="sort-label">Sweep</span></button>' : ''}
-                    </div>
+            <div class="watchlist-header tab-header">
+                <h2 class="cf-page-title">Manage Requests</h2>
+                <div class="watchlist-header-stats-container">
+                    <div class="watchlist-header-stats cf-stats-total">— total</div>
+                    <div class="watchlist-header-stats cf-stats-tab">— in view</div>
                 </div>
-
-                <div class="search-container">
-                    <div class="search-input-wrapper">
-                        <span class="material-icons search-icon">search</span>
-                        <input type="search" class="search-input cf-search" placeholder="Search requests…" autocomplete="off" />
-                    </div>
+                <div class="watchlist-header-right">
+                    <select class="cf-styled-select cf-kind">
+                        ${KINDS.map(k => '<option value="' + k.value + '">' + k.label + '</option>').join('')}
+                    </select>
+                    <button class="cf-icon-button cf-refresh" title="Refresh">
+                        <span class="material-icons">refresh</span>
+                    </button>
+                    ${isAdmin ? '<button class="cf-icon-button cf-sweep" title="Trigger sweep"><span class="material-icons">play_arrow</span></button>' : ''}
                 </div>
-
-                <div class="cf-status-msg"></div>
-                <div class="cf-pagination-top"></div>
-                <div class="paginated-container">
-                    <div class="progress-series cf-rows">${renderLoading()}</div>
-                </div>
-                <div class="cf-pagination-bottom"></div>
             </div>
+
+            <div class="cf-search-row">
+                <span class="material-icons cf-search-icon">search</span>
+                <input type="search" class="cf-search-fullwidth cf-search" placeholder="Search by title, series, author…" autocomplete="off" />
+            </div>
+
+            <div class="cf-status-msg"></div>
+            <div class="cf-pagination-top"></div>
+            <div class="paginated-container">
+                <div class="movie-history-grid cf-card-grid cf-rows">${renderLoading()}</div>
+            </div>
+            <div class="cf-pagination-bottom"></div>
         </div>`;
 
     const $ = (sel) => root.querySelector(sel);
@@ -244,7 +225,8 @@ export async function render(root) {
         return items.filter(r =>
             (r.series_name || '').toLowerCase().includes(q) ||
             (r.title || '').toLowerCase().includes(q) ||
-            (r.authors || '').toLowerCase().includes(q)
+            (r.authors || '').toLowerCase().includes(q) ||
+            (r.summary || '').toLowerCase().includes(q)
         );
     }
 
@@ -269,10 +251,8 @@ export async function render(root) {
         pagBottom.innerHTML = '';
         try {
             const items = [];
-            const statuses = activeTab.statuses || [null];
-            for (const s of statuses) {
-                const params = { limit: 500 };
-                if (s) params.status = s;
+            for (const s of activeTab.statuses) {
+                const params = { limit: 500, status: s };
                 if (kindFilter) params.kind = kindFilter;
                 const data = await api.listRequests(params);
                 items.push(...(data.items || []));
@@ -290,21 +270,21 @@ export async function render(root) {
     }
 
     // Status sub-tabs
-    root.querySelectorAll('.watchlist-tabs button').forEach((b) => {
+    root.querySelectorAll('.cf-status-tabs button').forEach((b) => {
         b.addEventListener('click', () => {
-            root.querySelectorAll('.watchlist-tabs button').forEach((x) => x.classList.remove('active'));
+            root.querySelectorAll('.cf-status-tabs button').forEach((x) => x.classList.remove('active'));
             b.classList.add('active');
             activeTab = STATUS_TABS.find((t) => t.id === b.dataset.tab) || STATUS_TABS[0];
             void refresh();
         });
     });
 
-    // Per-row admin actions
+    // Per-card admin actions
     if (isAdmin) {
         list.addEventListener('click', async (e) => {
             const btn = e.target.closest('button');
             if (!btn || btn.classList.contains('pagination-btn')) return;
-            const card = btn.closest('.progress-card[data-id]');
+            const card = btn.closest('.movie-card[data-id]');
             if (!card) return;
             const id = parseInt(card.dataset.id, 10);
             try {
@@ -339,7 +319,7 @@ export async function render(root) {
         });
     }
 
-    // Pagination delegation (top + bottom share handler)
+    // Pagination delegation
     [pagTop, pagBottom].forEach((host) => {
         host.addEventListener('click', (e) => {
             const btn = e.target.closest('button.pagination-btn');
@@ -353,10 +333,7 @@ export async function render(root) {
     });
 
     root.querySelector('.cf-refresh').addEventListener('click', refresh);
-    kindEl.addEventListener('change', () => {
-        kindFilter = kindEl.value;
-        void refresh();
-    });
+    kindEl.addEventListener('change', () => { kindFilter = kindEl.value; void refresh(); });
 
     let searchDebounce;
     searchEl.addEventListener('input', () => {
