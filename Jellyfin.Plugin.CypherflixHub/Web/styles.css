@@ -220,20 +220,130 @@
     gap: 16px;
 }
 
-/* Portrait poster — overrides KefinTweaks's 16:9 movie-poster ratio so
-   books and comics show their full cover art at native 2:3. */
+/* Portrait poster — strict 2:3 (book / comic standard) regardless of
+   image dimensions. !important wins over KefinTweaks's 16:9 default. */
 .cf-portrait-poster.movie-poster {
-    aspect-ratio: 2 / 3;
+    aspect-ratio: 2 / 3 !important;
+    width: 100% !important;
+    height: auto !important;
 }
 
 .cf-portrait-poster.movie-poster img {
+    width: 100%;
+    height: 100%;
     object-fit: cover;
+    display: block;
 }
 
 /* When there's no cover (wanted items pre-enrichment) the placeholder
-   shouldn't dominate — keep it readable. */
+   fills the same 2:3 slot. */
+.cf-portrait-poster .movie-poster-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
 .cf-portrait-poster .movie-poster-placeholder .material-icons {
     font-size: 56px;
+}
+
+/* ----- Card body — buttons pinned to bottom, title/summary flex --- */
+/* Each card is a flex column: poster fixed-ratio at top, then details
+   take all remaining space. Inside details, the title/subtitle/summary
+   block grows to push the action buttons against the bottom edge so
+   every card in a row aligns identically. */
+
+.cf-card.movie-card {
+    display: flex !important;
+    flex-direction: column;
+    height: 100%;
+}
+
+.cf-card .movie-details {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 12px 14px;
+    gap: 4px;
+    min-height: 0;
+}
+
+.cf-card .cf-card-body {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 0;
+}
+
+.cf-card .movie-actions {
+    flex: 0 0 auto;
+    margin-top: auto;
+    padding-top: 10px;
+}
+
+/* ----- Skeleton loading state ------------------------------------ */
+/* Drawn while waiting for the first listRequests / discoverTrending
+   response. Same dimensions as a real card so the grid doesn't shift. */
+
+.cf-skeleton-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 16px;
+    grid-column: 1 / -1;
+}
+
+.cf-skeleton-card {
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.cf-skeleton-poster {
+    aspect-ratio: 2 / 3;
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.05) 0%,
+        rgba(255, 255, 255, 0.12) 50%,
+        rgba(255, 255, 255, 0.05) 100%
+    );
+    background-size: 200% 100%;
+    animation: cf-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.cf-skeleton-line {
+    height: 12px;
+    border-radius: 4px;
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.05) 0%,
+        rgba(255, 255, 255, 0.12) 50%,
+        rgba(255, 255, 255, 0.05) 100%
+    );
+    background-size: 200% 100%;
+    animation: cf-skeleton-shimmer 1.4s ease-in-out infinite;
+    margin: 6px 14px;
+}
+
+.cf-skeleton-line.line-title  { width: 75%; height: 16px; margin-top: 12px; }
+.cf-skeleton-line.line-sub    { width: 55%; }
+.cf-skeleton-line.line-meta   { width: 35%; height: 10px; margin-bottom: 12px; }
+
+@keyframes cf-skeleton-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Image-fade-in: real covers fade up over the placeholder while loading. */
+.cf-card .movie-poster img.cf-cover-loading {
+    opacity: 0;
+    transition: opacity 0.25s ease;
+}
+.cf-card .movie-poster img.cf-cover-loaded {
+    opacity: 1;
 }
 
 /* ----- Status pill — top-right of card poster --------------------- */
