@@ -199,6 +199,15 @@
                         p.classList.add('hide');
                     }
                 });
+                // Override Jellyfin's "Page not found" header — its router sets
+                // both the document title and the .pageTitle element when our
+                // hash doesn't match a Jellyfin route. Re-apply each tick so
+                // we win the race.
+                const wantTitle = 'Cypherflix ' + route.title;
+                if (document.title !== wantTitle) document.title = wantTitle;
+                document.querySelectorAll('.pageTitle').forEach((el) => {
+                    if (el.textContent !== route.title) el.textContent = route.title;
+                });
             }
         } finally {
             mounting = false;
