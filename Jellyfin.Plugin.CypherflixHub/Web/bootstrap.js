@@ -9,9 +9,15 @@
     if (window.__cypherflixHubLoaded) return;
     window.__cypherflixHubLoaded = true;
 
+    // Cache-bust dynamic imports — Cache-Control: no-store on the server
+    // forces fresh fetches but ES module identity is per-URL, so we add a
+    // session-scoped cb param so each page-load gets a brand-new module
+    // graph (not just a fresh JSdownload). Sub-imports inside those modules
+    // need the same treatment — see api.js / user.js consumers.
+    const CB = '?cb=' + Date.now();
     const ROUTES = {
-        '#/cypherflix/discover': { module: '/CypherflixHub/Web/pages/discover.js', title: 'Discover' },
-        '#/cypherflix/manage':   { module: '/CypherflixHub/Web/pages/manage.js',   title: 'Manage'   },
+        '#/cypherflix/discover': { module: '/CypherflixHub/Web/pages/discover.js' + CB, title: 'Discover' },
+        '#/cypherflix/manage':   { module: '/CypherflixHub/Web/pages/manage.js'   + CB, title: 'Manage'   },
     };
 
     const STYLE_URL = '/CypherflixHub/Web/styles.css';
