@@ -168,22 +168,44 @@
     // Jellyfin re-renders portions of the DOM (drawer, page area) on
     // navigation, so we re-attempt sidenav injection whenever the body
     // mutates. Cheap because mountUserDrawerLinks() short-circuits.
+    // tryMount is idempotent for the bits that don't depend on state. We
+    // explicitly do NOT call renderRoute here — that mutates the DOM heavily
+    // (hides all sibling .page elements), and the MutationObserver below
+    // would loop. renderRoute fires only on hashchange + initial load.
+    let mounting = false;
     function tryMount() {
+        if (mounting) return;
+        mounting = true;
         try {
             mountUserDrawerLinks();
             mountAdminDrawerLink();
             ensurePageContainer();
-            // Re-apply route visibility — if Jellyfin recreated our container
-            // or unhid pages during navigation, sync state from the URL.
-            if (ROUTES[window.location.hash]) {
-                renderRoute(window.location.hash);
+            // If we're on a Cypherflix route but Jellyfin has unhidden every
+            // page during a navigation it routed itself, re-apply our hide
+            // state by toggling the container — but DON'T re-import the
+            // module or re-render content.
+            const route = ROUTES[window.location.hash];
+            const container = document.getElementById(CONTAINER_ID);
+            if (route && container && container.classList.contains('hide')) {
+                showOurPage(container);
             }
-        } catch (_) { /* best-effort */ }
+        } finally {
+            mounting = false;
+        }
+    }
+
+    let observerTimer = null;
+    function debouncedMount() {
+        if (observerTimer) return;
+        observerTimer = setTimeout(() => {
+            observerTimer = null;
+            tryMount();
+        }, 150);
     }
 
     document.addEventListener('DOMContentLoaded', tryMount);
     tryMount();
-    new MutationObserver(tryMount).observe(
+    new MutationObserver(debouncedMount).observe(
         document.body || document.documentElement,
         { childList: true, subtree: true },
     );
