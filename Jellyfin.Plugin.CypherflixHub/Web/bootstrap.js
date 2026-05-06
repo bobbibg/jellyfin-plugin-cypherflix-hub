@@ -74,18 +74,26 @@
     // We patch by reading the Custom Tabs plugin config, finding any tab
     // whose ContentHtml contains one of our anchor signatures, and cloning
     // a customTab_<N> div into existence with the configured HTML.
-    let _missingContainersChecked = false;
     async function ensureCustomTabContainers() {
-        if (_missingContainersChecked) return;
-        const proto = document.querySelector('[id^="customTab_"]');
+        // Jellyfin keeps SPA pages mounted, only toggling .hide. We must
+        // backfill into the CURRENTLY VISIBLE .libraryPage so our containers
+        // siblings the visible homeTab / customTab_0 — not some hidden one.
+        const liveLib = document.querySelector('.libraryPage:not(.hide)');
+        if (!liveLib) return;
+        const proto = liveLib.querySelector('[id^="customTab_"]');
         if (!proto) return;  // Custom Tabs hasn't initialised — try again later.
         const parent = proto.parentElement;
-        if (!parent) return;
+        if (!parent || parent !== liveLib) return;
+        // Skip if our containers already exist as DIRECT children of the
+        // live libraryPage. Otherwise check anew (allows recovery if user
+        // reconfigures Custom Tabs mid-session).
+        const haveOurs = !!liveLib.querySelector(':scope > .sections.cypherflix-discover, :scope > .sections.cypherflix-manage');
         const client = window.ApiClient;
         if (!client || typeof client.accessToken !== 'function') return;
         const tok = client.accessToken();
         if (!tok) return;
         const base = (typeof client.serverAddress === 'function' ? client.serverAddress() : '') || '';
+        if (haveOurs) return;
         try {
             const plugins = await fetch(base + '/Plugins', {
                 credentials: 'same-origin',
@@ -105,19 +113,20 @@
                 const html = t.ContentHtml || '';
                 const isOurs = ourSigs.some((s) => html.indexOf(s) !== -1);
                 if (!isOurs) continue;
-                const expectedId = 'customTab_' + i;
-                if (document.getElementById(expectedId)) continue;
+                // Skip if a sibling with this index already exists IN THE LIVE
+                // libraryPage. Duplicate IDs may exist from older runs in
+                // hidden libraryPages — those are OK to leave alone.
+                if (liveLib.querySelector(':scope > [data-index="' + (i + 2) + '"]')) continue;
                 // Clone the prototype's wrapper attributes so Jellyfin's
                 // tab-routing logic recognises our container.
                 const node = proto.cloneNode(false);
-                node.id = expectedId;
+                node.id = 'customTab_' + i;
                 if (proto.dataset.index !== undefined) {
                     node.dataset.index = String(i + 2);  // Home=0, Favourites=1, custom=2+
                 }
                 node.innerHTML = html;
-                parent.appendChild(node);
+                liveLib.appendChild(node);
             }
-            _missingContainersChecked = true;
         } catch (_) { /* best-effort; observer will retry */ }
     }
 
@@ -130,15 +139,14 @@
     function syncActiveCustomTab() {
         const m = (window.location.hash || '').match(/[?&]tab=(\d+)/);
         if (!m) return;
+        const liveLib = document.querySelector('.libraryPage:not(.hide)');
+        if (!liveLib) return;
         const wantIdx = parseInt(m[1], 10);
-        const wanted = document.querySelector('[id^="customTab_"][data-index="' + wantIdx + '"]');
+        const wanted = liveLib.querySelector(':scope > [id^="customTab_"][data-index="' + wantIdx + '"]');
         if (!wanted) return;
         if (wanted.classList.contains('is-active')) return;  // Jellyfin handled it.
         // Deactivate every other tab pane in the same parent.
-        const parent = wanted.parentElement;
-        if (parent) {
-            parent.querySelectorAll('.tabContent').forEach((p) => p.classList.remove('is-active'));
-        }
+        liveLib.querySelectorAll(':scope > .tabContent').forEach((p) => p.classList.remove('is-active'));
         wanted.classList.add('is-active');
         // Sync top tab-strip buttons: deactivate others, activate ours.
         document.querySelectorAll('.tabs-viewmenubar .emby-tab-button').forEach((b) => b.classList.remove('emby-tab-button-active'));
