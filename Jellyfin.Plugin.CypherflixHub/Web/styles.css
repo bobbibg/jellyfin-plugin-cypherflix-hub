@@ -1,30 +1,39 @@
-/* Cypherflix Hub — page styles.
-   Most card / tab / pagination styling cascades from KefinTweaks's
-   watchlist.css (we wrap content in .sections.watchlist-style markup
-   and reuse class names). This file adds:
-     - Glassmorphic backdrop matching Watchlist / Favourites
-     - Portrait posters per media type (smaller cards, more per row)
-     - Status pill overlay top-right of each Manage card
-     - Full-width search row
-     - Native <select> styled to match KefinTweaks's .sort-button look
+/* Cypherflix Hub — page styles
+   --------------------------------------------------------------------
+   Two pages, two visual languages:
+
+     Queue (manage)  → row strips, KefinTweaks Series-Progress feel.
+     Discover        → cover-only carousels, Jellyseerr-style.
+
+   Common shell (.cf-host, glassmorphic backdrop) shared.
+   --------------------------------------------------------------------
 */
 
-/* ----- Host shell + glassmorphic backdrop ------------------------- */
+/* ===== Common shell + glass backdrop ============================== */
 
 .sections.cypherflix-discover,
 .sections.cypherflix-manage {
-    /* The Custom Tabs body is our outer container; we add a glass layer
-       behind so the card grid sits on a frosted backdrop, matching
-       Jellyfin's Watchlist + Favourites tab feel. */
+    /* Lift above Jellyfin's .backgroundContainer (position:fixed inset:0
+       with z-index:auto). Without this, mobile breaks: the backdrop
+       layer covers our content. Defensive media query below pushes the
+       z-index higher just for narrow viewports. */
     position: relative;
+    z-index: 1;
     padding-top: 8px;
     padding-bottom: 40px;
 }
 
-.sections.cypherflix-discover .cf-host,
-.sections.cypherflix-manage   .cf-host {
+@media (max-width: 768px) {
+    .sections.cypherflix-discover,
+    .sections.cypherflix-manage {
+        position: relative !important;
+        z-index: 2 !important;
+        background: var(--theme-background-color, rgba(15, 17, 28, 0.92));
+    }
+}
+
+.cf-host {
     position: relative;
-    z-index: 1;
 }
 
 .cf-glass-backdrop {
@@ -41,121 +50,35 @@
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
 }
 
-.cf-host-inner {
+.cf-host > *:not(.cf-glass-backdrop) {
     position: relative;
-    z-index: 2;
-    padding: 12px 16px 0;
+    z-index: 1;
+}
+
+.cf-host-inner {
     max-width: 1400px;
     margin: 0 auto;
+    padding: 12px 16px 0;
 }
 
-/* ----- Tabs row tweaks (status / discover sub-tabs) --------------- */
-
-.cf-status-tabs,
-.cf-discover-tabs {
-    /* KefinTweaks scopes tab styling to `.sections.watchlist .watchlist-tabs`
-       — our wrapper isn't `.sections.watchlist` so we restate the look
-       here (centred pills with bottom border highlight). */
-    display: flex;
-    gap: 8px;
-    padding: 0 16px 4px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    justify-content: center;
-    margin-bottom: 8px;
+/* Shared shimmer for skeleton placeholders */
+.cf-q-skeleton-shimmer {
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.05) 0%,
+        rgba(255, 255, 255, 0.12) 50%,
+        rgba(255, 255, 255, 0.05) 100%
+    );
+    background-size: 200% 100%;
+    animation: cf-shimmer 1.4s ease-in-out infinite;
+    border-radius: 6px;
+}
+@keyframes cf-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
 }
 
-.cf-status-tabs button,
-.cf-discover-tabs button {
-    background: transparent;
-    border: none;
-    color: rgba(255, 255, 255, 0.7);
-    padding: 12px 16px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    border-bottom: 2px solid transparent;
-    transition: all 0.2s ease;
-    border-radius: 10px 10px 0 0;
-    font-family: inherit;
-}
-
-.cf-status-tabs button:hover,
-.cf-discover-tabs button:hover {
-    color: rgba(200, 200, 200, 0.9);
-    background: rgba(255, 255, 255, 0.05);
-}
-
-.cf-status-tabs button.active,
-.cf-discover-tabs button.active {
-    color: #fff;
-    border-bottom-color: #fff;
-    background: rgba(200, 200, 200, 0.1);
-}
-
-/* ----- Header / title row ----------------------------------------- */
-
-.cf-page-title {
-    font-size: 24px;
-    font-weight: 600;
-    color: #fff;
-    margin: 0;
-}
-
-.cf-status-msg {
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 13px;
-    margin: 0.5rem 1rem;
-    min-height: 1.4em;
-}
-
-/* ----- Full-width search row -------------------------------------- */
-/* KefinTweaks ships a max-width:400px centred pill — we want a full-width
-   bar across the content. */
-
-.cf-search-row {
-    position: relative;
-    margin: 16px 16px 20px;
-}
-
-.cf-search-row .cf-search-icon {
-    position: absolute;
-    top: 50%;
-    left: 16px;
-    transform: translateY(-50%);
-    color: rgba(255, 255, 255, 0.55);
-    font-size: 22px;
-    pointer-events: none;
-}
-
-.cf-search-fullwidth {
-    width: 100%;
-    height: 44px;
-    padding: 0 16px 0 48px;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    border-radius: 10px;
-    color: #fff;
-    font-size: 15px;
-    outline: none;
-    transition: all 0.2s ease;
-    box-sizing: border-box;
-}
-
-.cf-search-fullwidth::placeholder {
-    color: rgba(255, 255, 255, 0.45);
-}
-
-.cf-search-fullwidth:focus {
-    background: rgba(255, 255, 255, 0.14);
-    border-color: rgba(255, 255, 255, 0.4);
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
-}
-
-/* ----- Styled <select> --------------------------------------------- */
-/* Native select dropdowns can't be styled cross-browser — we kill the
-   default chrome and fake the chevron so it matches KefinTweaks's
-   .sort-button visual. */
-
+/* Styled <select> + icon button shared across both pages */
 .cf-styled-select {
     appearance: none;
     -webkit-appearance: none;
@@ -175,184 +98,180 @@
     background-size: 5px 5px, 5px 5px;
     background-repeat: no-repeat;
 }
-
-.cf-styled-select:hover {
-    background-color: rgba(255, 255, 255, 0.15);
-    border-color: rgba(255, 255, 255, 0.35);
-}
-
-.cf-styled-select:focus {
-    outline: none;
-    border-color: rgba(255, 255, 255, 0.45);
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
-}
-
-/* The OS-rendered <option> menu can't be styled, but we can at least
-   give it a sensible dark background so it doesn't flash white. */
-.cf-styled-select option {
-    background: #1c1f29;
-    color: #fff;
-}
+.cf-styled-select:hover { background-color: rgba(255, 255, 255, 0.15); border-color: rgba(255, 255, 255, 0.35); }
+.cf-styled-select:focus { outline: none; border-color: rgba(255, 255, 255, 0.45); box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08); }
+.cf-styled-select option { background: #1c1f29; color: #fff; }
 
 .cf-icon-button {
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.2);
     color: #fff;
     border-radius: 6px;
-    width: 38px;
-    height: 38px;
+    width: 38px; height: 38px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     transition: all 0.2s ease;
 }
+.cf-icon-button:hover { background: rgba(255, 255, 255, 0.18); border-color: rgba(255, 255, 255, 0.35); }
 
-.cf-icon-button:hover {
-    background: rgba(255, 255, 255, 0.18);
-    border-color: rgba(255, 255, 255, 0.35);
+
+/* ===== Queue (manage) page ======================================== */
+
+/* Tab strip — full width with a continuous bottom border that the
+   active button's underline overlays cleanly (no dangling line). */
+.cf-q-tabs {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    padding: 0 16px;
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.12);
+    margin-bottom: 16px;
+}
+.cf-q-tabs button {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.7);
+    padding: 12px 20px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: all 0.2s ease;
+    border-radius: 8px 8px 0 0;
+    font-family: inherit;
+}
+.cf-q-tabs button:hover  { color: rgba(255, 255, 255, 0.92); background: rgba(255, 255, 255, 0.05); }
+.cf-q-tabs button.active {
+    color: #fff;
+    border-bottom-color: #fff;
+    background: rgba(255, 255, 255, 0.08);
 }
 
-/* ----- Card grid: portrait posters, smaller cells, more per row --- */
-
-.cf-card-grid.movie-history-grid {
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 16px;
+/* Toolbar — single row: search flex-1, kind dropdown, refresh, sweep */
+.cf-q-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
 }
-
-/* Portrait poster — strict 2:3 (book / comic standard) regardless of
-   image dimensions. !important wins over KefinTweaks's 16:9 default. */
-.cf-portrait-poster.movie-poster {
-    aspect-ratio: 2 / 3 !important;
-    width: 100% !important;
-    height: auto !important;
+.cf-q-search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 0;
 }
-
-.cf-portrait-poster.movie-poster img {
+.cf-q-search-icon {
+    position: absolute;
+    top: 50%; left: 14px;
+    transform: translateY(-50%);
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 22px;
+    pointer-events: none;
+}
+.cf-q-search {
     width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
+    height: 40px;
+    padding: 0 14px 0 44px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 8px;
+    color: #fff;
+    font-size: 14px;
+    outline: none;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+    font-family: inherit;
+}
+.cf-q-search::placeholder { color: rgba(255, 255, 255, 0.45); }
+.cf-q-search:focus { background: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.4); }
+
+.cf-q-status-msg {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 13px;
+    min-height: 1.2em;
+    margin: 4px 0 8px;
 }
 
-/* When there's no cover (wanted items pre-enrichment) the placeholder
-   fills the same 2:3 slot. */
-.cf-portrait-poster .movie-poster-placeholder {
+/* Pagination */
+.cf-q-pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 4px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    margin: 8px 0;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.cf-q-page-info { color: rgba(255, 255, 255, 0.7); font-size: 13px; font-weight: 500; }
+.cf-q-page-controls { display: flex; align-items: center; gap: 4px; }
+.cf-q-page-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: rgba(255, 255, 255, 0.85);
+    padding: 6px 10px;
+    min-width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.cf-q-page-btn:hover:not(.disabled):not(.active) { background: rgba(255, 255, 255, 0.15); }
+.cf-q-page-btn.active   { background: #00a4dc; border-color: #00a4dc; color: #fff; }
+.cf-q-page-btn.disabled { opacity: 0.4; cursor: not-allowed; }
+.cf-q-page-nums { display: flex; gap: 2px; }
+.cf-q-page-ellipsis { color: rgba(255, 255, 255, 0.5); padding: 0 4px; }
+.cf-q-pagination-top + .cf-q-rows { margin-top: 0; }
+
+/* Row strip — the heart of the Queue page */
+.cf-q-rows { display: flex; flex-direction: column; gap: 8px; }
+.cf-q-row {
+    position: relative;
+    display: grid;
+    grid-template-columns: 80px 1fr auto auto;
+    gap: 12px;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    padding: 10px 12px 14px;
+    transition: background 0.15s ease;
+}
+.cf-q-row:hover { background: rgba(255, 255, 255, 0.07); }
+
+.cf-q-row-cover {
+    width: 80px;
+    aspect-ratio: 2 / 3;
+    border-radius: 6px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.06);
+    flex-shrink: 0;
+}
+.cf-q-row-cover img,
+.cf-q-row-cover .cf-q-poster-placeholder {
     width: 100%;
     height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
+    object-fit: cover;
 }
+.cf-q-poster-placeholder { color: rgba(255, 255, 255, 0.4); }
+.cf-q-poster-placeholder .material-icons { font-size: 32px; }
 
-.cf-portrait-poster .movie-poster-placeholder .material-icons {
-    font-size: 56px;
-}
+.cf-q-row-body { min-width: 0; }
+.cf-q-row-title    { color: #fff; font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf-q-row-subtitle { color: rgba(255, 255, 255, 0.7); font-size: 13px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf-q-row-meta     { color: rgba(255, 255, 255, 0.55); font-size: 12px; margin-top: 4px; }
+.cf-q-row-reason   { color: #ff8b8b; font-size: 12px; margin-top: 4px; font-style: italic; }
 
-/* ----- Card body — buttons pinned to bottom, title/summary flex --- */
-/* Each card is a flex column: poster fixed-ratio at top, then details
-   take all remaining space. Inside details, the title/subtitle/summary
-   block grows to push the action buttons against the bottom edge so
-   every card in a row aligns identically. */
-
-.cf-card.movie-card {
-    display: flex !important;
-    flex-direction: column;
-    height: 100%;
-}
-
-.cf-card .movie-details {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    padding: 12px 14px;
-    gap: 4px;
-    min-height: 0;
-}
-
-.cf-card .cf-card-body {
-    flex: 1 1 auto;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    min-height: 0;
-}
-
-.cf-card .movie-actions {
-    flex: 0 0 auto;
-    margin-top: auto;
-    padding-top: 10px;
-}
-
-/* ----- Skeleton loading state ------------------------------------ */
-/* Drawn while waiting for the first listRequests / discoverTrending
-   response. Same dimensions as a real card so the grid doesn't shift. */
-
-.cf-skeleton-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 16px;
-    grid-column: 1 / -1;
-}
-
-.cf-skeleton-card {
-    background: rgba(255, 255, 255, 0.06);
-    border-radius: 12px;
-    overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.cf-skeleton-poster {
-    aspect-ratio: 2 / 3;
-    background: linear-gradient(
-        90deg,
-        rgba(255, 255, 255, 0.05) 0%,
-        rgba(255, 255, 255, 0.12) 50%,
-        rgba(255, 255, 255, 0.05) 100%
-    );
-    background-size: 200% 100%;
-    animation: cf-skeleton-shimmer 1.4s ease-in-out infinite;
-}
-
-.cf-skeleton-line {
-    height: 12px;
-    border-radius: 4px;
-    background: linear-gradient(
-        90deg,
-        rgba(255, 255, 255, 0.05) 0%,
-        rgba(255, 255, 255, 0.12) 50%,
-        rgba(255, 255, 255, 0.05) 100%
-    );
-    background-size: 200% 100%;
-    animation: cf-skeleton-shimmer 1.4s ease-in-out infinite;
-    margin: 6px 14px;
-}
-
-.cf-skeleton-line.line-title  { width: 75%; height: 16px; margin-top: 12px; }
-.cf-skeleton-line.line-sub    { width: 55%; }
-.cf-skeleton-line.line-meta   { width: 35%; height: 10px; margin-bottom: 12px; }
-
-@keyframes cf-skeleton-shimmer {
-    0%   { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-}
-
-/* Image-fade-in: real covers fade up over the placeholder while loading. */
-.cf-card .movie-poster img.cf-cover-loading {
-    opacity: 0;
-    transition: opacity 0.25s ease;
-}
-.cf-card .movie-poster img.cf-cover-loaded {
-    opacity: 1;
-}
-
-/* ----- Status pill — top-right of card poster --------------------- */
-
-.cf-status-overlay {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    z-index: 5;
+.cf-q-row-status { display: flex; align-items: center; }
+.cf-q-pill {
     color: #fff;
     font-size: 11px;
     font-weight: 600;
@@ -360,108 +279,302 @@
     border-radius: 12px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-}
-
-.cf-status-overlay-wanted        { background: rgba(234, 179, 8, 0.92); color: #1c1c1c; }
-.cf-status-overlay-searching     { background: rgba(168, 85, 247, 0.92); }
-.cf-status-overlay-snatched,
-.cf-status-overlay-downloading,
-.cf-status-overlay-importing,
-.cf-status-overlay-tagging       { background: rgba(59, 130, 246, 0.92); }
-.cf-status-overlay-done          { background: rgba(76, 175, 80, 0.92); }
-.cf-status-overlay-failed,
-.cf-status-overlay-blocked       { background: rgba(239, 68, 68, 0.92); }
-
-/* Make the .movie-poster the positioning context for the overlay (it's
-   already position:relative per KefinTweaks). */
-.cf-card .movie-poster {
-    position: relative;
-    overflow: hidden;
-}
-
-/* ----- Card body content ------------------------------------------ */
-
-.cf-card .movie-details {
-    padding: 12px 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.cf-card .movie-title {
-    font-size: 15px;
-    font-weight: 600;
-    color: #fff;
-    margin: 0 0 2px;
-    line-height: 1.3;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
-
-.cf-card .cf-card-subtitle {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.7);
-    overflow: hidden;
-    text-overflow: ellipsis;
+    background: rgba(255, 255, 255, 0.15);
     white-space: nowrap;
 }
+.cf-q-pill-wanted        { background: rgba(234, 179, 8, 0.92); color: #1c1c1c; }
+.cf-q-pill-searching     { background: rgba(168, 85, 247, 0.92); }
+.cf-q-pill-snatched,
+.cf-q-pill-downloading,
+.cf-q-pill-importing,
+.cf-q-pill-tagging       { background: rgba(59, 130, 246, 0.92); }
+.cf-q-pill-done          { background: rgba(76, 175, 80, 0.92); }
+.cf-q-pill-failed,
+.cf-q-pill-blocked       { background: rgba(239, 68, 68, 0.92); }
 
-.cf-card .movie-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin: 4px 0 0;
-    font-size: 12px;
+.cf-q-row-actions { display: flex; gap: 4px; }
+.cf-q-iconbtn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.85);
+    width: 32px; height: 32px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
+.cf-q-iconbtn:hover { background: rgba(255, 255, 255, 0.18); }
+.cf-q-iconbtn .material-icons { font-size: 18px; }
+.cf-q-iconbtn-danger { color: #ff8b8b; border-color: rgba(239, 68, 68, 0.4); }
+.cf-q-iconbtn-danger:hover { background: rgba(239, 68, 68, 0.15); }
 
-.cf-card .cf-card-summary {
-    margin-top: 6px;
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.65);
-    line-height: 1.4;
-    display: -webkit-box;
-    -webkit-line-clamp: 4;
-    -webkit-box-orient: vertical;
+.cf-q-row-progress {
+    grid-column: 1 / -1;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 2px;
     overflow: hidden;
+    margin-top: 8px;
+}
+.cf-q-row-progress-fill { height: 100%; transition: width 0.3s ease; }
+.cf-q-row-progress-fill.cf-q-row-progress-wanted     { background: rgba(234, 179, 8, 0.5); }
+.cf-q-row-progress-fill.cf-q-row-progress-failed,
+.cf-q-row-progress-fill.cf-q-row-progress-blocked    { background: rgba(239, 68, 68, 0.7); }
+.cf-q-row-progress-fill.cf-q-row-progress-done       { background: linear-gradient(90deg, #4caf50, #2e7d32); }
+.cf-q-row-progress-fill.cf-q-row-progress-searching,
+.cf-q-row-progress-fill.cf-q-row-progress-snatched,
+.cf-q-row-progress-fill.cf-q-row-progress-downloading,
+.cf-q-row-progress-fill.cf-q-row-progress-importing,
+.cf-q-row-progress-fill.cf-q-row-progress-tagging    { background: linear-gradient(90deg, #00a4dc, #0078d4); }
+
+/* Skeleton row */
+.cf-q-row-skeleton .cf-q-row-cover { background: rgba(255, 255, 255, 0.06); }
+.cf-q-skeleton-line { border-radius: 4px; height: 12px; }
+
+/* Empty / error */
+.cf-q-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: rgba(255, 255, 255, 0.7);
+}
+.cf-q-empty .material-icons { font-size: 48px; opacity: 0.5; margin-bottom: 12px; }
+.cf-q-empty h3 { color: #fff; margin: 0 0 8px; font-size: 18px; }
+.cf-q-empty p  { margin: 0; color: rgba(255, 255, 255, 0.6); }
+.cf-q-empty-error h3 { color: #ff8b8b; }
+
+/* Cover fade-in for lazy loader */
+.cf-q-row-cover img.cf-cover-loading { opacity: 0; transition: opacity 0.25s ease; }
+.cf-q-row-cover img.cf-cover-loaded  { opacity: 1; }
+
+/* Mobile adjustments */
+@media (max-width: 640px) {
+    .cf-q-row {
+        grid-template-columns: 60px 1fr;
+        grid-template-rows: auto auto;
+    }
+    .cf-q-row-cover { width: 60px; }
+    .cf-q-row-status   { grid-column: 2; }
+    .cf-q-row-actions  { grid-column: 1 / -1; justify-content: flex-end; }
+    .cf-q-row-progress { grid-column: 1 / -1; }
+    .cf-q-tabs { padding: 0 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .cf-q-tabs button { white-space: nowrap; }
 }
 
-.cf-card .cf-card-reason {
-    margin-top: 6px;
-    font-size: 11px;
-    color: #ff8b8b;
+
+/* ===== Discover page (Jellyseerr-style) =========================== */
+
+.cf-discover-host { padding: 0 0 40px; }
+
+.cf-d-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 1400px;
+    margin: 16px auto 24px;
+    padding: 0 16px;
+    position: relative;
+}
+.cf-d-search-icon {
+    position: absolute; top: 50%; left: 30px;
+    transform: translateY(-50%);
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 22px;
+    pointer-events: none;
+}
+.cf-d-search-input {
+    flex: 1;
+    height: 44px;
+    padding: 0 14px 0 48px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 10px;
+    color: #fff;
+    font-size: 15px;
+    outline: none;
+    box-sizing: border-box;
+    font-family: inherit;
+}
+.cf-d-search-input::placeholder { color: rgba(255, 255, 255, 0.45); }
+.cf-d-search-input:focus { background: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.4); }
+
+.cf-d-status-msg {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 13px;
+    min-height: 1em;
+    margin: 0 16px 8px;
+    text-align: center;
+}
+
+.cf-d-search-results { max-width: 1400px; margin: 0 auto; padding: 0 16px; }
+.cf-d-search-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 16px;
+}
+
+/* Category rows — full-width carousels */
+.cf-d-rows { display: flex; flex-direction: column; gap: 28px; }
+
+.cf-d-row { width: 100%; }
+.cf-d-row-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 0 24px;
+    margin-bottom: 10px;
+}
+.cf-d-row-title {
+    color: #fff;
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+}
+.cf-d-row-status {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 13px;
+}
+
+/* Horizontal scroller — full bleed, snaps */
+.cf-d-row-scroller {
+    display: flex;
+    gap: 14px;
+    overflow-x: auto;
+    overflow-y: visible;
+    padding: 4px 24px 16px;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+.cf-d-row-scroller::-webkit-scrollbar { height: 8px; }
+.cf-d-row-scroller::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+.cf-d-row-empty {
+    padding: 32px 24px;
+    color: rgba(255, 255, 255, 0.5);
     font-style: italic;
 }
 
-.cf-card .movie-actions {
-    display: flex;
-    gap: 6px;
-    margin-top: 10px;
+/* The card — cover-only by default */
+.cf-d-card {
+    flex: 0 0 auto;
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    scroll-snap-align: start;
+    transition: transform 0.25s ease, box-shadow 0.25s ease, z-index 0s 0.25s;
+    background: rgba(255, 255, 255, 0.04);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
+.cf-d-poster-portrait  { width: 180px; aspect-ratio: 2 / 3; }
+.cf-d-poster-landscape { width: 280px; aspect-ratio: 16 / 9; }
 
-.cf-card .movie-action-btn {
-    padding: 6px 8px;
-    font-size: 11px;
-    flex: 1;
-    justify-content: center;
-}
-
-/* ----- Empty state polish ----------------------------------------- */
-
-.movie-history-empty-message {
-    grid-column: 1 / -1;
-}
-
-/* Reduce spacing on small screens so cards stay tappable. */
 @media (max-width: 640px) {
-    .cf-card-grid.movie-history-grid {
-        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-        gap: 10px;
-    }
-    .cf-card .movie-title { font-size: 14px; }
-    .cf-card .cf-card-summary { -webkit-line-clamp: 3; }
+    .cf-d-poster-portrait  { width: 130px; }
+    .cf-d-poster-landscape { width: 200px; }
 }
+
+.cf-d-card-poster {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.06);
+}
+.cf-d-card-poster img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.cf-d-poster-placeholder {
+    color: rgba(255, 255, 255, 0.35);
+}
+.cf-d-poster-placeholder .material-icons { font-size: 56px; }
+
+/* Hover overlay — gradient + slide-up details */
+.cf-d-card-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+.cf-d-card-overlay-grad {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        to top,
+        rgba(0, 0, 0, 0.92) 0%,
+        rgba(0, 0, 0, 0.65) 35%,
+        rgba(0, 0, 0, 0.15) 70%,
+        transparent 100%
+    );
+}
+.cf-d-card-overlay-body {
+    position: absolute;
+    inset: auto 0 0 0;
+    padding: 12px 12px 14px;
+    color: #fff;
+    transform: translateY(8px);
+    transition: transform 0.2s ease;
+}
+.cf-d-card:hover,
+.cf-d-card:focus-within {
+    transform: translateY(-4px) scale(1.04);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+    z-index: 5;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.cf-d-card:hover .cf-d-card-overlay,
+.cf-d-card:focus-within .cf-d-card-overlay {
+    opacity: 1;
+    pointer-events: auto;
+}
+.cf-d-card:hover .cf-d-card-overlay-body,
+.cf-d-card:focus-within .cf-d-card-overlay-body {
+    transform: translateY(0);
+}
+
+.cf-d-card-title    { font-size: 14px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.cf-d-card-subtitle { font-size: 12px; color: rgba(255, 255, 255, 0.78); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf-d-card-meta     { font-size: 11px; color: rgba(255, 255, 255, 0.6); margin-top: 4px; }
+.cf-d-card-summary  { font-size: 11px; color: rgba(255, 255, 255, 0.7); margin-top: 6px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+.cf-d-card-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 8px;
+    padding: 6px 10px;
+    background: #00a4dc;
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    font-family: inherit;
+}
+.cf-d-card-cta:hover { background: #0078d4; }
+.cf-d-card-cta .material-icons { font-size: 16px; }
+.cf-d-card-cta-queued { background: rgba(76, 175, 80, 0.85); cursor: default; }
+.cf-d-card-cta-queued:hover { background: rgba(76, 175, 80, 0.85); }
+
+/* Touch — tap reveals overlay (no hover on touch). The :focus-within
+   rule above gives us tap activation if the user taps the card; tap
+   again on the CTA fires the request. Tap-away removes focus. */
+@media (hover: none) {
+    .cf-d-card-overlay {
+        opacity: 1;  /* always visible on touch since hover is unreliable */
+    }
+    .cf-d-card-overlay-body { transform: translateY(0); }
+}
+
+/* Skeleton card (matches portrait OR landscape via shared aspect class) */
+.cf-d-card-skeleton .cf-d-card-poster { background: rgba(255, 255, 255, 0.06); }

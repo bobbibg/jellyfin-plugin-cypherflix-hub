@@ -1,16 +1,25 @@
-// Discover view — Seer-style browse over books + comics. Renders into a
-// Custom Tab anchor div (.sections.cypherflix-discover). 3 sub-tabs:
-// Trending / Coming Soon / Search.
+// Discover view — Jellyseerr-style home page.
+// Full-width horizontal carousels per category. Each card shows JUST
+// the cover by default; hover/touch reveals title + year + author/
+// summary + Add-to-Queue button via a vertical gradient overlay.
+//
+// Anchor div class stays .sections.cypherflix-discover.
+// Sub-tabs are gone — search lives inline at the top; when active, it
+// replaces the category list with a result grid.
 
 let api;
 
-const SUB_TABS = [
-    { id: 'trending',   label: 'Trending'    },
-    { id: 'comingSoon', label: 'Coming Soon' },
-    { id: 'search',     label: 'Search'      },
-];
-
 const PAGE_SIZE = 24;
+
+const CATEGORIES = [
+    { id: 'trending-books',  title: 'Trending Books',  loader: () => api.discoverTrending('book',  30) },
+    { id: 'trending-comics', title: 'Trending Comics', loader: () => api.discoverTrending('comic', 30) },
+    { id: 'coming-soon',     title: 'Coming Soon',     loader: () => api.discoverComingSoon(30) },
+    // Movies / TV / anime / manga rows light up once those clients land
+    // server-side (see docs/plans/movies-tv-integration.md). Until then
+    // we don't render empty-state placeholders for them — the home page
+    // stays clean.
+];
 
 function escapeHtml(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
@@ -27,349 +36,226 @@ function kindIcon(kind) {
     if (kind === 'book')         return 'menu_book';
     if (kind === 'comic_issue')  return 'auto_stories';
     if (kind === 'comic_series') return 'auto_stories';
+    if (kind === 'movie')        return 'movie';
+    if (kind === 'tv_episode')   return 'tv';
     return 'collections_bookmark';
 }
 
+function aspectClassFor(kind) {
+    if (kind === 'movie' || kind === 'tv_episode' || kind === 'anime_episode') return 'cf-d-poster-landscape';
+    return 'cf-d-poster-portrait';
+}
+
+// Cover-only card. Title / metadata / CTA live in an overlay that's
+// invisible until hover/focus/touch.
 function renderCard(item) {
     const titleParts = [];
     if (item.series_name) titleParts.push(item.series_name);
     if (item.issue_number) titleParts.push('#' + item.issue_number);
     const title = titleParts.join(' ') || item.title || '(untitled)';
 
-    // Subtitle is the author when known. Falls back to the alt-title only
-    // when no author info is available (rare for books, common for comics).
     const subtitle = item.authors
-        ? '<div class="cf-card-subtitle">' + escapeHtml(item.authors) + '</div>'
-        : (item.title && item.title !== item.series_name
-            ? '<div class="cf-card-subtitle">' + escapeHtml(item.title) + '</div>'
-            : '');
+        ? item.authors
+        : (item.title && item.title !== item.series_name ? item.title : '');
 
     const meta = [];
-    if (item.year)         meta.push('<span class="movie-year">' + escapeHtml(String(item.year)) + '</span>');
-    if (item.release_date) meta.push('<span class="movie-runtime"><span class="material-icons">event</span>' + escapeHtml(fmtDate(item.release_date)) + '</span>');
+    if (item.year)         meta.push(escapeHtml(String(item.year)));
+    if (item.release_date) meta.push(escapeHtml(fmtDate(item.release_date)));
 
     const summary = item.summary
-        ? '<div class="cf-card-summary">' + escapeHtml(item.summary.slice(0, 160)) + (item.summary.length > 160 ? '…' : '') + '</div>'
+        ? escapeHtml(item.summary.slice(0, 200)) + (item.summary.length > 200 ? '…' : '')
         : '';
 
     const poster = item.cover_url
         ? '<img src="' + escapeHtml(item.cover_url) + '" alt="" loading="lazy" />'
-        : '<div class="movie-poster-placeholder"><span class="material-icons">' + kindIcon(item.kind) + '</span></div>';
+        : '<div class="cf-d-poster-placeholder"><span class="material-icons">' + kindIcon(item.kind) + '</span></div>';
 
     return `
-        <div class="movie-card cf-card cf-card-${item.kind} cf-discover-card"
-             data-source="${escapeHtml(item.source)}"
-             data-source-id="${escapeHtml(item.source_id)}">
-            <div class="movie-poster cf-portrait-poster">
-                ${poster}
-                <div class="movie-poster-overlay"></div>
-            </div>
-            <div class="movie-details">
-                <div class="cf-card-body">
-                    <h3 class="movie-title">${escapeHtml(title)}</h3>
-                    ${subtitle}
-                    <div class="movie-meta">${meta.join('')}</div>
-                    ${summary}
-                </div>
-                <div class="movie-actions">
-                    <button class="movie-action-btn cf-request-btn">
+        <div class="cf-d-card ${aspectClassFor(item.kind)}"
+             data-source="${escapeHtml(item.source || '')}"
+             data-source-id="${escapeHtml(item.source_id || '')}"
+             tabindex="0">
+            <div class="cf-d-card-poster">${poster}</div>
+            <div class="cf-d-card-overlay">
+                <div class="cf-d-card-overlay-grad"></div>
+                <div class="cf-d-card-overlay-body">
+                    <div class="cf-d-card-title">${escapeHtml(title)}</div>
+                    ${subtitle ? '<div class="cf-d-card-subtitle">' + escapeHtml(subtitle) + '</div>' : ''}
+                    ${meta.length ? '<div class="cf-d-card-meta">' + meta.join(' · ') + '</div>' : ''}
+                    ${summary ? '<div class="cf-d-card-summary">' + summary + '</div>' : ''}
+                    <button class="cf-d-card-cta">
                         <span class="material-icons">add</span>
-                        <span>Request</span>
+                        <span>Add to Queue</span>
                     </button>
                 </div>
             </div>
         </div>`;
 }
 
-function skeletonGrid(count) {
-    const card = `
-        <div class="cf-skeleton-card">
-            <div class="cf-skeleton-poster"></div>
-            <div class="cf-skeleton-line line-title"></div>
-            <div class="cf-skeleton-line line-sub"></div>
-            <div class="cf-skeleton-line line-meta"></div>
-        </div>`;
-    return '<div class="cf-skeleton-grid">' + Array(count).fill(card).join('') + '</div>';
-}
-
-function renderEmpty(msg) {
-    return '<div class="movie-history-empty-message"><div class="empty-message-icon"><span class="material-icons">explore</span></div><h3 class="empty-message-title">Nothing to show</h3><p class="empty-message-subtitle">' + escapeHtml(msg || '') + '</p></div>';
-}
-
-function renderLoading(_msg) {
-    return skeletonGrid(PAGE_SIZE);
-}
-
-function renderError(err) {
-    return '<div class="movie-history-empty-message"><div class="empty-message-icon"><span class="material-icons">error_outline</span></div><h3 class="empty-message-title">Error</h3><p class="empty-message-subtitle">' + escapeHtml(err.message || String(err)) + '</p></div>';
-}
-
-function renderPagination(page, totalPages, position) {
-    if (totalPages <= 1) return '';
-    const cls = position === 'top' ? 'pagination pagination-top' : 'pagination pagination-bottom';
-    const btn = (label, target, disabled, active) => {
-        const c = ['pagination-btn'];
-        if (active) c.push('active');
-        if (disabled) c.push('disabled');
-        return `<button class="${c.join(' ')}" data-page="${target}"${disabled ? ' disabled' : ''}>${label}</button>`;
-    };
-    const pages = [];
-    const window = 2;
-    const start = Math.max(1, page - window);
-    const end = Math.min(totalPages, page + window);
-    if (start > 1) pages.push(1);
-    if (start > 2) pages.push('…');
-    for (let p = start; p <= end; p++) pages.push(p);
-    if (end < totalPages - 1) pages.push('…');
-    if (end < totalPages) pages.push(totalPages);
-    const pageHtml = pages.map(p =>
-        p === '…' ? '<span class="pagination-ellipsis">…</span>' : btn(String(p), p, false, p === page)
-    ).join('');
+function skeletonCard(aspectClass) {
     return `
-        <div class="${cls}">
-            <div class="pagination-info">Page ${page} of ${totalPages}</div>
-            <div class="pagination-controls">
-                ${btn('<span class="material-icons">chevron_left</span>', page - 1, page <= 1)}
-                <div class="pagination-pages">${pageHtml}</div>
-                ${btn('<span class="material-icons">chevron_right</span>', page + 1, page >= totalPages)}
-            </div>
+        <div class="cf-d-card cf-d-card-skeleton ${aspectClass}">
+            <div class="cf-d-card-poster cf-q-skeleton-shimmer"></div>
         </div>`;
 }
 
-async function handleRequest(card, msg) {
-    const item = JSON.parse(card.dataset.payload || '{}');
+function renderCategoryRow(cat) {
+    return `
+        <section class="cf-d-row" data-row-id="${escapeHtml(cat.id)}">
+            <header class="cf-d-row-header">
+                <h2 class="cf-d-row-title">${escapeHtml(cat.title)}</h2>
+                <span class="cf-d-row-status"></span>
+            </header>
+            <div class="cf-d-row-scroller">
+                ${Array(8).fill(skeletonCard('cf-d-poster-portrait')).join('')}
+            </div>
+        </section>`;
+}
+
+async function loadCategoryRow(rowEl, cat, msg) {
+    const scroller = rowEl.querySelector('.cf-d-row-scroller');
+    const status = rowEl.querySelector('.cf-d-row-status');
+    try {
+        const data = await cat.loader();
+        const items = (data && (data.items || [])) || [];
+        if (!items.length) {
+            scroller.innerHTML = '<div class="cf-d-row-empty">Nothing here yet.</div>';
+            status.textContent = '0';
+            return;
+        }
+        scroller.innerHTML = items.map(renderCard).join('');
+        scroller.querySelectorAll('.cf-d-card[data-source-id]').forEach((card, i) => {
+            try { card.dataset.payload = JSON.stringify(items[i]); } catch (_) {}
+        });
+        status.textContent = items.length + (items.length === 1 ? ' item' : ' items');
+    } catch (err) {
+        scroller.innerHTML = '<div class="cf-d-row-empty">Error: ' + escapeHtml(err.message || String(err)) + '</div>';
+        if (msg) msg.textContent = 'Error loading "' + cat.title + '": ' + (err.message || String(err));
+    }
+}
+
+// --- Add-to-Queue ---------------------------------------------------------
+
+async function handleAddToQueue(card, msg) {
+    let item;
+    try { item = JSON.parse(card.dataset.payload || '{}'); }
+    catch (_) { item = {}; }
     if (!item.watchlist_payload) {
-        msg.textContent = 'No watchlist payload on item.';
+        msg.textContent = 'No watchlist payload on this item.';
         return;
     }
     const body = { kind: item.watchlist_kind, ...item.watchlist_payload };
     try {
         await api.createWatchlist(body);
-        msg.textContent = 'Added to watchlist.';
-        const btn = card.querySelector('.cf-request-btn');
+        msg.textContent = 'Added to queue.';
+        const btn = card.querySelector('.cf-d-card-cta');
         if (btn) {
-            btn.innerHTML = '<span class="material-icons">check</span><span>Requested</span>';
+            btn.innerHTML = '<span class="material-icons">check</span><span>Queued</span>';
             btn.disabled = true;
-            btn.classList.add('favorited');
+            btn.classList.add('cf-d-card-cta-queued');
         }
     } catch (err) {
         msg.textContent = 'Error: ' + (err.message || String(err));
     }
 }
 
-function setupPaginatedGrid(host, items, msg) {
-    let page = 1;
-    const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
-    const grid     = host.querySelector('.cf-grid');
-    const pagTop   = host.querySelector('.cf-pagination-top');
-    const pagBot   = host.querySelector('.cf-pagination-bottom');
+// --- search ---------------------------------------------------------------
 
-    function paint() {
-        const slice = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-        grid.innerHTML = slice.length ? slice.map(renderCard).join('') : renderEmpty('Nothing here yet.');
-        grid.querySelectorAll('.movie-card[data-source-id]').forEach((card, i) => {
-            try { card.dataset.payload = JSON.stringify(slice[i]); } catch (_) {}
-        });
-        pagTop.innerHTML = renderPagination(page, totalPages, 'top');
-        pagBot.innerHTML = renderPagination(page, totalPages, 'bottom');
+async function runSearch(host, query, kind, msg) {
+    if (!query) {
+        host.innerHTML = '';
+        return;
     }
-
-    [pagTop, pagBot].forEach((p) => {
-        p.addEventListener('click', (e) => {
-            const btn = e.target.closest('button.pagination-btn');
-            if (!btn || btn.classList.contains('disabled') || btn.classList.contains('active')) return;
-            const target = parseInt(btn.dataset.page, 10);
-            if (!Number.isFinite(target)) return;
-            page = target;
-            paint();
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        });
-    });
-
-    grid.addEventListener('click', async (e) => {
-        const btn = e.target.closest('.cf-request-btn');
-        if (!btn) return;
-        const card = btn.closest('.movie-card[data-source-id]');
-        if (card) await handleRequest(card, msg);
-    });
-
-    paint();
-}
-
-const SHELL = `
-    <div class="cf-pagination-top"></div>
-    <div class="paginated-container">
-        <div class="movie-history-grid cf-card-grid cf-grid"></div>
-    </div>
-    <div class="cf-pagination-bottom"></div>`;
-
-async function renderTrending(host, msg) {
-    msg.textContent = '';
-    host.innerHTML = `
-        <div class="watchlist-header tab-header">
-            <h2 class="cf-page-title">Trending</h2>
-            <div class="watchlist-header-stats-container">
-                <div class="watchlist-header-stats cf-stats-books">— books</div>
-                <div class="watchlist-header-stats cf-stats-comics">— comics</div>
-            </div>
-        </div>
-        <div class="cf-trending-row" data-row="books">
-            <h3 class="sectionTitle sectionTitle-cards" style="margin: 1.2em 0 0.4em;">Trending Books</h3>
-            ${SHELL}
-        </div>
-        <div class="cf-trending-row" data-row="comics">
-            <h3 class="sectionTitle sectionTitle-cards" style="margin: 1.2em 0 0.4em;">Trending Comics</h3>
-            ${SHELL}
-        </div>`;
-
-    // Seed both grids with skeletons immediately so the page doesn't
-    // render as a hollow shell during the network round-trip.
-    host.querySelector('[data-row="books"]  .cf-grid').innerHTML = skeletonGrid(8);
-    host.querySelector('[data-row="comics"] .cf-grid').innerHTML = skeletonGrid(8);
-
+    host.innerHTML = '<div class="cf-d-search-grid">' +
+        Array(8).fill(skeletonCard('cf-d-poster-portrait')).join('') +
+        '</div>';
     try {
-        const [books, comics] = await Promise.all([
-            api.discoverTrending('book', 30).catch(() => ({ items: [] })),
-            api.discoverTrending('comic', 30).catch(() => ({ items: [] })),
-        ]);
-        const bItems = books.items || [];
-        const cItems = comics.items || [];
-        host.querySelector('.cf-stats-books').textContent  = bItems.length + ' books';
-        host.querySelector('.cf-stats-comics').textContent = cItems.length + ' comics';
-        setupPaginatedGrid(host.querySelector('[data-row="books"]'),  bItems,  msg);
-        setupPaginatedGrid(host.querySelector('[data-row="comics"]'), cItems, msg);
-        // Surface a hint when Hardcover isn't returning anything — usually
-        // means HARDCOVER_API_TOKEN isn't set on the grabber container.
-        if (!bItems.length) {
-            const grid = host.querySelector('[data-row="books"] .cf-grid');
-            grid.innerHTML = renderEmpty('No books from Hardcover. Set HARDCOVER_API_TOKEN on the grabber container — get a free token at hardcover.app/account/api.');
-        }
-    } catch (err) {
-        host.innerHTML = renderError(err);
-    }
-}
-
-async function renderComingSoon(host, msg) {
-    msg.textContent = '';
-    host.innerHTML = `
-        <div class="watchlist-header tab-header">
-            <h2 class="cf-page-title">Coming Soon — From Your Watchlist</h2>
-            <div class="watchlist-header-stats-container">
-                <div class="watchlist-header-stats cf-stats-total">— upcoming</div>
-            </div>
-        </div>
-        ${SHELL}`;
-    host.querySelector('.cf-grid').innerHTML = skeletonGrid(8);
-    try {
-        const data = await api.discoverComingSoon(60);
-        const items = data.items || [];
-        host.querySelector('.cf-stats-total').textContent = items.length + ' upcoming';
-        setupPaginatedGrid(host, items, msg);
-    } catch (err) {
-        host.innerHTML = renderError(err);
-    }
-}
-
-async function renderSearch(host, msg) {
-    msg.textContent = '';
-    host.innerHTML = `
-        <div class="watchlist-header tab-header">
-            <h2 class="cf-page-title">Search</h2>
-            <div class="watchlist-header-right">
-                <select class="cf-styled-select cf-search-kind">
-                    <option value="">All</option>
-                    <option value="book">Books</option>
-                    <option value="comic">Comics</option>
-                </select>
-            </div>
-        </div>
-        <div class="cf-search-row">
-            <span class="material-icons cf-search-icon">search</span>
-            <input type="search" class="cf-search-fullwidth cf-search-input" placeholder="Search books and comics…" autocomplete="off" />
-        </div>
-        ${SHELL}`;
-
-    const grid    = host.querySelector('.cf-grid');
-    const pagTop  = host.querySelector('.cf-pagination-top');
-    const pagBot  = host.querySelector('.cf-pagination-bottom');
-    const input   = host.querySelector('.cf-search-input');
-    const kindEl  = host.querySelector('.cf-search-kind');
-
-    grid.innerHTML = renderEmpty('Type to search across books and comics.');
-
-    let lastQuery = '';
-    let inflight = 0;
-    let debounce;
-
-    async function go() {
-        const q = (input.value || '').trim();
-        if (!q) {
-            grid.innerHTML = renderEmpty('Type to search across books and comics.');
-            pagTop.innerHTML = ''; pagBot.innerHTML = '';
+        const data = await api.discoverSearch(query, kind || undefined, 60);
+        const items = (data && data.items) || [];
+        if (!items.length) {
+            host.innerHTML = '<div class="cf-d-row-empty">No results for "' + escapeHtml(query) + '".</div>';
             return;
         }
-        if (q === lastQuery) return;
-        lastQuery = q;
-        const myToken = ++inflight;
-        grid.innerHTML = renderLoading('Searching…');
-        pagTop.innerHTML = ''; pagBot.innerHTML = '';
-        try {
-            const data = await api.discoverSearch(q, kindEl.value || undefined, 60);
-            if (myToken !== inflight) return;
-            const items = data.items || [];
-            if (!items.length) {
-                grid.innerHTML = renderEmpty('No results.');
-                return;
-            }
-            setupPaginatedGrid(host, items, msg);
-        } catch (err) {
-            if (myToken !== inflight) return;
-            grid.innerHTML = renderError(err);
-        }
+        const grid = document.createElement('div');
+        grid.className = 'cf-d-search-grid';
+        grid.innerHTML = items.map(renderCard).join('');
+        grid.querySelectorAll('.cf-d-card[data-source-id]').forEach((card, i) => {
+            try { card.dataset.payload = JSON.stringify(items[i]); } catch (_) {}
+        });
+        host.innerHTML = '';
+        host.appendChild(grid);
+    } catch (err) {
+        host.innerHTML = '<div class="cf-d-row-empty">Error: ' + escapeHtml(err.message || String(err)) + '</div>';
     }
-
-    input.addEventListener('input', () => {
-        clearTimeout(debounce);
-        debounce = setTimeout(go, 350);
-    });
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); clearTimeout(debounce); go(); }
-    });
-    kindEl.addEventListener('change', () => { lastQuery = ''; go(); });
 }
+
+// --- entry point ----------------------------------------------------------
 
 export async function render(root) {
     ({ api } = await import('./api.js?cb=' + Date.now()));
 
-    root.classList.add('cf-host');
+    root.classList.add('cf-host', 'cf-discover-host');
     root.innerHTML = `
         <div class="cf-glass-backdrop"></div>
-        <div class="cf-host-inner">
-            <div class="watchlist-tabs cf-discover-tabs">
-                ${SUB_TABS.map((t, i) => `
-                    <button data-tab="${t.id}" class="${i === 0 ? 'active' : ''}">${t.label}</button>
-                `).join('')}
-            </div>
-            <div class="cf-status-msg"></div>
-            <div class="cf-tab-host"></div>
+        <div class="cf-d-search-bar">
+            <span class="material-icons cf-d-search-icon">search</span>
+            <input type="search" class="cf-d-search-input" placeholder="Search books and comics…" autocomplete="off" />
+            <select class="cf-styled-select cf-d-search-kind">
+                <option value="">All</option>
+                <option value="book">Books</option>
+                <option value="comic">Comics</option>
+            </select>
+        </div>
+        <div class="cf-d-status-msg"></div>
+        <div class="cf-d-search-results"></div>
+        <div class="cf-d-rows">
+            ${CATEGORIES.map(renderCategoryRow).join('')}
         </div>`;
 
-    const tabHost = root.querySelector('.cf-tab-host');
-    const msg = root.querySelector('.cf-status-msg');
+    const $ = (s) => root.querySelector(s);
+    const msg          = $('.cf-d-status-msg');
+    const searchInput  = $('.cf-d-search-input');
+    const searchKind   = $('.cf-d-search-kind');
+    const searchHost   = $('.cf-d-search-results');
+    const rowsHost     = $('.cf-d-rows');
 
-    async function activate(id) {
-        if (id === 'trending')   return renderTrending(tabHost, msg);
-        if (id === 'comingSoon') return renderComingSoon(tabHost, msg);
-        if (id === 'search')     return renderSearch(tabHost, msg);
-    }
-
-    root.querySelectorAll('.cf-discover-tabs button').forEach((b) => {
-        b.addEventListener('click', () => {
-            root.querySelectorAll('.cf-discover-tabs button').forEach((x) => x.classList.remove('active'));
-            b.classList.add('active');
-            void activate(b.dataset.tab);
-        });
+    // load each category in parallel; row stays skeleton until its data lands
+    CATEGORIES.forEach((cat) => {
+        const rowEl = root.querySelector('[data-row-id="' + cat.id + '"]');
+        if (rowEl) void loadCategoryRow(rowEl, cat, msg);
     });
 
-    void activate('trending');
+    // search — debounced; when active hide the category rows
+    let searchDebounce;
+    let lastQuery = '';
+    function triggerSearch() {
+        const q = (searchInput.value || '').trim();
+        if (q === lastQuery) return;
+        lastQuery = q;
+        if (!q) {
+            searchHost.innerHTML = '';
+            rowsHost.style.display = '';
+            return;
+        }
+        rowsHost.style.display = 'none';
+        void runSearch(searchHost, q, searchKind.value, msg);
+    }
+    searchInput.addEventListener('input', () => {
+        clearTimeout(searchDebounce);
+        searchDebounce = setTimeout(triggerSearch, 350);
+    });
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); clearTimeout(searchDebounce); triggerSearch(); }
+        if (e.key === 'Escape') { searchInput.value = ''; clearTimeout(searchDebounce); triggerSearch(); }
+    });
+    searchKind.addEventListener('change', () => { lastQuery = ''; triggerSearch(); });
+
+    // Add-to-Queue delegated click handler — works for both category rows
+    // and search-results grid since they share the .cf-d-card class.
+    root.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.cf-d-card-cta');
+        if (!btn) return;
+        const card = btn.closest('.cf-d-card[data-source-id]');
+        if (card) await handleAddToQueue(card, msg);
+    });
 }

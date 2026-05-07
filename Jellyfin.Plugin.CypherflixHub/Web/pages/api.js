@@ -94,6 +94,13 @@ export const api = {
     retryRequest:     (id)                            => http('POST', '/requests/' + id + '/retry'),
     refreshMetadata:  (id)                            => http('POST', '/requests/' + id + '/refresh-metadata'),
     regrabRequest:    (id)                            => http('POST', '/requests/' + id + '/regrab'),
+    deleteRequest:    (id)                            => http('DELETE', '/requests/' + id),
+
+    // Creator blocklist (admin)
+    listBlockedCreators:   ()         => http('GET',    '/blocklist/creators'),
+    addBlockedCreator:     (body)     => http('POST',   '/blocklist/creators', body),
+    removeBlockedCreator:  (id)       => http('DELETE', '/blocklist/creators/' + id),
+    refreshBlockedCreator: (id)       => http('POST',   '/blocklist/creators/' + id + '/refresh'),
     triggerSweep:     ()                              => http('POST', '/sweep'),
     triggerReorganize: (dryRun)                       => http('POST', '/reorganize?dry_run=' + (dryRun ? 'true' : 'false')),
 

@@ -1,14 +1,15 @@
-// Manage view — visually mirrors Watchlist's Movie History grid.
-// Renders into a Custom Tab anchor div (.sections.cypherflix-manage). The
-// outer .sections.watchlist class on the parent inherits KefinTweaks's
-// styling for tabs / cards / pagination / search.
+// Queue view (formerly "Manage") — visually mirrors KefinTweaks
+// Watchlist > Series Progress: full-width row strip per item with a
+// small portrait cover (~80px), inline progress bar, status pill,
+// and a right-aligned action cluster.
 //
-// 5 status buckets:
-//   Wanted (incl. failed/blocked so admin can retry) → wanted/failed/blocked
-//   Downloading                                       → searching/snatched/downloading
-//   Downloaded                                        → importing
-//   Enriching   (queue for metadata enrichment)        → tagging
-//   Complete                                           → done
+// Anchor div class stays .sections.cypherflix-manage so existing
+// Custom Tabs / KefinTweaks config keeps working — only the visible
+// label changes to "Queue".
+//
+// Five status buckets (no All): Wanted / Downloading / Downloaded /
+// Enriching / Complete. Failed/blocked items roll into Wanted with a
+// red-tinted status pill so admin can retry or remove from queue.
 
 let api;
 let isCurrentUserAdmin;
@@ -28,7 +29,7 @@ const KINDS = [
     { value: 'audiobook',   label: 'Audiobooks' },
 ];
 
-const PAGE_SIZE = 24;
+const PAGE_SIZE = 20;
 
 function escapeHtml(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
@@ -41,16 +42,35 @@ function fmtDate(s) {
     try { return new Date(s).toLocaleDateString(); } catch (_) { return s; }
 }
 
-function statusOverlay(status) {
-    const cls = 'cf-status-overlay cf-status-overlay-' + status;
-    return '<div class="' + cls + '">' + status.toUpperCase() + '</div>';
-}
-
 function kindIcon(kind) {
     if (kind === 'book')         return 'menu_book';
     if (kind === 'comic_issue')  return 'auto_stories';
     if (kind === 'audiobook')    return 'headphones';
     return 'collections_bookmark';
+}
+
+// --- progress bar ---------------------------------------------------------
+// Each row gets a full-width slim bar along the bottom of the strip.
+// Width = progress_pct when present; else heuristic per status.
+
+function progressFor(r) {
+    if (r.progress_pct != null) return Math.max(0, Math.min(100, Math.round(r.progress_pct)));
+    switch (r.status) {
+        case 'wanted':       return 0;
+        case 'failed':       return 0;
+        case 'blocked':      return 0;
+        case 'searching':    return 10;
+        case 'snatched':     return 20;
+        case 'downloading':  return 50;
+        case 'importing':    return 75;
+        case 'tagging':      return 90;
+        case 'done':         return 100;
+        default:             return 0;
+    }
+}
+
+function statusPill(status) {
+    return '<span class="cf-q-pill cf-q-pill-' + status + '">' + status + '</span>';
 }
 
 function primaryTitle(r) {
@@ -60,117 +80,101 @@ function primaryTitle(r) {
     return parts.length ? parts.join(' ') : (r.title || '(untitled)');
 }
 
-function renderCard(r, isAdmin) {
-    const meta = [];
-    if (r.series_year)  meta.push('<span class="movie-year">' + escapeHtml(String(r.series_year)) + '</span>');
-    if (r.release_date) meta.push('<span class="movie-runtime"><span class="material-icons">event</span>' + escapeHtml(fmtDate(r.release_date)) + '</span>');
+function subtitleFor(r) {
+    if (r.authors) return r.authors;
+    if (r.title && r.title !== r.series_name) return r.title;
+    return '';
+}
 
-    // Subtitle is the author when known. Falls back to the issue/book
-    // title when authors aren't on the row (common for comics where the
-    // ComicVine response we ingest doesn't always include credits).
-    const subtitleLine = r.authors
-        ? '<div class="cf-card-subtitle">' + escapeHtml(r.authors) + '</div>'
-        : (r.title && r.title !== r.series_name
-            ? '<div class="cf-card-subtitle">' + escapeHtml(r.title) + '</div>'
-            : '');
-    const summary = r.summary
-        ? '<div class="cf-card-summary">' + escapeHtml(r.summary.slice(0, 220)) + (r.summary.length > 220 ? '…' : '') + '</div>'
-        : '';
-    const reasonLine = r.status_reason
-        ? '<div class="cf-card-reason">' + escapeHtml(r.status_reason) + '</div>'
-        : '';
+function metaLineFor(r) {
+    const bits = [];
+    if (r.series_year)  bits.push(r.series_year);
+    if (r.release_date) bits.push('Released ' + fmtDate(r.release_date));
+    if (r.size_mb)      bits.push(Math.round(r.size_mb) + ' MB');
+    if (r.retries > 0)  bits.push(r.retries + ' retr' + (r.retries === 1 ? 'y' : 'ies'));
+    return bits.join(' · ');
+}
 
-    const adminActions = isAdmin ? `
-        <div class="movie-actions">
-            <button class="movie-action-btn cf-retry"        title="Reset to wanted"><span class="material-icons">replay</span></button>
-            <button class="movie-action-btn cf-refresh-meta" title="Refresh metadata"><span class="material-icons">cloud_sync</span></button>
-            <button class="movie-action-btn cf-regrab"       title="Re-grab"><span class="material-icons">file_download</span></button>
-        </div>` : '';
-
-    // The cf-needs-cover marker is what the lazy-cover loader looks for
-    // post-render — items without a cached cover get one fetched on-demand.
+// One row per request — full-width horizontal strip. Cover left, body
+// flex-grow, action cluster right, progress bar across the bottom.
+function renderRow(r, isAdmin) {
     const poster = r.cover_url
         ? '<img src="' + escapeHtml(r.cover_url) + '" alt="" loading="lazy" />'
-        : '<div class="movie-poster-placeholder cf-needs-cover" data-request-id="' + r.id + '"><span class="material-icons">' + kindIcon(r.kind) + '</span></div>';
+        : '<div class="cf-q-poster-placeholder cf-needs-cover" data-request-id="' + r.id + '">' +
+              '<span class="material-icons">' + kindIcon(r.kind) + '</span>' +
+          '</div>';
+
+    const subtitle = subtitleFor(r);
+    const reason = r.status_reason
+        ? '<div class="cf-q-row-reason">' + escapeHtml(r.status_reason) + '</div>'
+        : '';
+
+    const progress = progressFor(r);
+    const stuck = r.status === 'failed' || r.status === 'blocked' || (r.status === 'wanted' && r.retries >= 3);
+
+    const adminActions = isAdmin ? `
+        <div class="cf-q-row-actions">
+            <button class="cf-q-iconbtn cf-q-retry"        title="Retry"><span class="material-icons">replay</span></button>
+            <button class="cf-q-iconbtn cf-q-refresh-meta" title="Refresh metadata"><span class="material-icons">cloud_sync</span></button>
+            <button class="cf-q-iconbtn cf-q-regrab"       title="Re-grab"><span class="material-icons">file_download</span></button>
+            ${stuck ? '<button class="cf-q-iconbtn cf-q-remove cf-q-iconbtn-danger" title="Remove from queue"><span class="material-icons">delete_outline</span></button>' : ''}
+        </div>` : '';
 
     return `
-        <div class="movie-card cf-card cf-card-${r.kind} cf-card-status-${r.status}" data-id="${r.id}">
-            <div class="movie-poster cf-portrait-poster">
-                ${poster}
-                <div class="movie-poster-overlay">${statusOverlay(r.status)}</div>
+        <div class="cf-q-row cf-q-row-status-${r.status}" data-id="${r.id}">
+            <div class="cf-q-row-cover">${poster}</div>
+            <div class="cf-q-row-body">
+                <div class="cf-q-row-title">${escapeHtml(primaryTitle(r))}</div>
+                ${subtitle ? '<div class="cf-q-row-subtitle">' + escapeHtml(subtitle) + '</div>' : ''}
+                <div class="cf-q-row-meta">${escapeHtml(metaLineFor(r))}</div>
+                ${reason}
             </div>
-            <div class="movie-details">
-                <div class="cf-card-body">
-                    <h3 class="movie-title">${escapeHtml(primaryTitle(r))}</h3>
-                    ${subtitleLine}
-                    <div class="movie-meta">${meta.join('')}</div>
-                    ${summary}
-                    ${reasonLine}
-                </div>
-                ${adminActions}
+            <div class="cf-q-row-status">${statusPill(r.status)}</div>
+            ${adminActions}
+            <div class="cf-q-row-progress">
+                <div class="cf-q-row-progress-fill cf-q-row-progress-${r.status}" style="width: ${progress}%"></div>
             </div>
         </div>`;
 }
 
-function skeletonGrid(count) {
-    const card = `
-        <div class="cf-skeleton-card">
-            <div class="cf-skeleton-poster"></div>
-            <div class="cf-skeleton-line line-title"></div>
-            <div class="cf-skeleton-line line-sub"></div>
-            <div class="cf-skeleton-line line-meta"></div>
-        </div>`;
-    return '<div class="cf-skeleton-grid">' + Array(count).fill(card).join('') + '</div>';
-}
+// --- skeleton + empty/error/loading states --------------------------------
 
-// Lazy-fetch covers for cards that don't have one yet. Sequential to
-// avoid hammering ComicVine/Hardcover; SafeClient on the backend rate-
-// limits anyway. Aborts the in-flight chain when the user navigates away.
-async function fillMissingCovers(host, abortSignal) {
-    const placeholders = host.querySelectorAll('.movie-poster-placeholder.cf-needs-cover[data-request-id]');
-    for (const ph of placeholders) {
-        if (abortSignal && abortSignal.aborted) return;
-        const id = parseInt(ph.dataset.request_id || ph.dataset.requestId, 10);
-        if (!Number.isFinite(id)) continue;
-        try {
-            const data = await api.getRequestCover(id);
-            if (abortSignal && abortSignal.aborted) return;
-            const url = data && data.cover_url;
-            if (!url) continue;
-            const img = document.createElement('img');
-            img.alt = '';
-            img.loading = 'lazy';
-            img.className = 'cf-cover-loading';
-            img.src = url;
-            img.onload = () => img.classList.replace('cf-cover-loading', 'cf-cover-loaded');
-            // Replace the placeholder with the real image.
-            ph.replaceWith(img);
-        } catch (_) { /* leave placeholder */ }
-    }
+function skeletonRows(count) {
+    const row = `
+        <div class="cf-q-row cf-q-row-skeleton">
+            <div class="cf-q-row-cover cf-q-skeleton-shimmer"></div>
+            <div class="cf-q-row-body">
+                <div class="cf-q-skeleton-line cf-q-skeleton-shimmer" style="width:60%; height:16px"></div>
+                <div class="cf-q-skeleton-line cf-q-skeleton-shimmer" style="width:40%; height:12px; margin-top:8px"></div>
+                <div class="cf-q-skeleton-line cf-q-skeleton-shimmer" style="width:30%; height:10px; margin-top:6px"></div>
+            </div>
+        </div>`;
+    return Array(count).fill(row).join('');
 }
 
 function renderEmpty(msg) {
     return `
-        <div class="movie-history-empty-message">
-            <div class="empty-message-icon"><span class="material-icons">inbox</span></div>
-            <h3 class="empty-message-title">No requests in this view</h3>
-            <p class="empty-message-subtitle">${escapeHtml(msg || 'Try a different bucket or kind.')}</p>
+        <div class="cf-q-empty">
+            <span class="material-icons">inbox</span>
+            <h3>No items in this view</h3>
+            <p>${escapeHtml(msg || 'Try a different bucket or kind.')}</p>
+        </div>`;
+}
+function renderError(err) {
+    return `
+        <div class="cf-q-empty cf-q-empty-error">
+            <span class="material-icons">error_outline</span>
+            <h3>Error</h3>
+            <p>${escapeHtml(err.message || String(err))}</p>
         </div>`;
 }
 
-function renderLoading() {
-    return skeletonGrid(PAGE_SIZE);
-}
+// --- pagination -----------------------------------------------------------
 
-function renderError(err) {
-    return '<div class="movie-history-empty-message"><div class="empty-message-icon"><span class="material-icons">error_outline</span></div><h3 class="empty-message-title">Error</h3><p class="empty-message-subtitle">' + escapeHtml(err.message || String(err)) + '</p></div>';
-}
-
-function renderPagination(page, totalPages, position) {
-    if (totalPages <= 1) return '';
-    const cls = position === 'top' ? 'pagination pagination-top' : 'pagination pagination-bottom';
+function renderPagination(page, totalPages, totalAll, totalView) {
+    const cls = 'cf-q-pagination';
     const btn = (label, target, disabled, active) => {
-        const c = ['pagination-btn'];
+        const c = ['cf-q-page-btn'];
         if (active) c.push('active');
         if (disabled) c.push('disabled');
         return `<button class="${c.join(' ')}" data-page="${target}"${disabled ? ' disabled' : ''}>${label}</button>`;
@@ -185,18 +189,46 @@ function renderPagination(page, totalPages, position) {
     if (end < totalPages - 1) pages.push('…');
     if (end < totalPages) pages.push(totalPages);
     const pageHtml = pages.map(p =>
-        p === '…' ? '<span class="pagination-ellipsis">…</span>' : btn(String(p), p, false, p === page)
+        p === '…'
+            ? '<span class="cf-q-page-ellipsis">…</span>'
+            : btn(String(p), p, false, p === page)
     ).join('');
     return `
         <div class="${cls}">
-            <div class="pagination-info">Page ${page} of ${totalPages}</div>
-            <div class="pagination-controls">
+            <div class="cf-q-page-info">Page ${page} of ${Math.max(1, totalPages)} · ${totalAll} total · ${totalView} in view</div>
+            <div class="cf-q-page-controls">
                 ${btn('<span class="material-icons">chevron_left</span>', page - 1, page <= 1)}
-                <div class="pagination-pages">${pageHtml}</div>
+                <div class="cf-q-page-nums">${pageHtml}</div>
                 ${btn('<span class="material-icons">chevron_right</span>', page + 1, page >= totalPages)}
             </div>
         </div>`;
 }
+
+// --- lazy cover loader ----------------------------------------------------
+
+async function fillMissingCovers(host, abortSignal) {
+    const placeholders = host.querySelectorAll('.cf-needs-cover[data-request-id]');
+    for (const ph of placeholders) {
+        if (abortSignal && abortSignal.aborted) return;
+        const id = parseInt(ph.dataset.requestId || ph.dataset.request_id || '0', 10);
+        if (!Number.isFinite(id) || id === 0) continue;
+        try {
+            const data = await api.getRequestCover(id);
+            if (abortSignal && abortSignal.aborted) return;
+            const url = data && data.cover_url;
+            if (!url) continue;
+            const img = document.createElement('img');
+            img.alt = '';
+            img.loading = 'lazy';
+            img.className = 'cf-cover-loading';
+            img.src = url;
+            img.onload = () => img.classList.replace('cf-cover-loading', 'cf-cover-loaded');
+            ph.replaceWith(img);
+        } catch (_) { /* leave placeholder */ }
+    }
+}
+
+// --- entry point ----------------------------------------------------------
 
 export async function render(root) {
     const cb = '?cb=' + Date.now();
@@ -209,58 +241,43 @@ export async function render(root) {
     let searchTerm = '';
     let currentPage = 1;
     let allItems = [];
-    // AbortController so navigating away cancels in-flight cover fetches.
     let coverAbort = new AbortController();
 
-    root.classList.add('cf-host');
+    root.classList.add('cf-host', 'cf-queue-host');
     root.innerHTML = `
         <div class="cf-glass-backdrop"></div>
-        <div class="cf-host-inner">
-            <div class="watchlist-tabs cf-status-tabs">
-                ${STATUS_TABS.map((t, i) => `
-                    <button data-tab="${t.id}" class="${i === 0 ? 'active' : ''}">${t.label}</button>
-                `).join('')}
-            </div>
-
-            <div class="watchlist-header tab-header">
-                <h2 class="cf-page-title">Manage Requests</h2>
-                <div class="watchlist-header-stats-container">
-                    <div class="watchlist-header-stats cf-stats-total">— total</div>
-                    <div class="watchlist-header-stats cf-stats-tab">— in view</div>
+        <div class="cf-q-tabs">
+            ${STATUS_TABS.map((t, i) => `
+                <button data-tab="${t.id}" class="${i === 0 ? 'active' : ''}">${t.label}</button>
+            `).join('')}
+        </div>
+        <div class="cf-host-inner cf-queue-inner">
+            <div class="cf-q-toolbar">
+                <div class="cf-q-search-wrap">
+                    <span class="material-icons cf-q-search-icon">search</span>
+                    <input type="search" class="cf-q-search" placeholder="Search the queue…" autocomplete="off" />
                 </div>
-                <div class="watchlist-header-right">
-                    <select class="cf-styled-select cf-kind">
-                        ${KINDS.map(k => '<option value="' + k.value + '">' + k.label + '</option>').join('')}
-                    </select>
-                    <button class="cf-icon-button cf-refresh" title="Refresh">
-                        <span class="material-icons">refresh</span>
-                    </button>
-                    ${isAdmin ? '<button class="cf-icon-button cf-sweep" title="Trigger sweep"><span class="material-icons">play_arrow</span></button>' : ''}
-                </div>
+                <select class="cf-styled-select cf-q-kind">
+                    ${KINDS.map(k => '<option value="' + k.value + '">' + k.label + '</option>').join('')}
+                </select>
+                <button class="cf-icon-button cf-q-refresh" title="Refresh">
+                    <span class="material-icons">refresh</span>
+                </button>
+                ${isAdmin ? '<button class="cf-icon-button cf-q-sweep" title="Trigger sweep"><span class="material-icons">play_arrow</span></button>' : ''}
             </div>
-
-            <div class="cf-search-row">
-                <span class="material-icons cf-search-icon">search</span>
-                <input type="search" class="cf-search-fullwidth cf-search" placeholder="Search by title, series, author…" autocomplete="off" />
-            </div>
-
-            <div class="cf-status-msg"></div>
-            <div class="cf-pagination-top"></div>
-            <div class="paginated-container">
-                <div class="movie-history-grid cf-card-grid cf-rows">${renderLoading()}</div>
-            </div>
-            <div class="cf-pagination-bottom"></div>
+            <div class="cf-q-status-msg"></div>
+            <div class="cf-q-pagination-top"></div>
+            <div class="cf-q-rows">${skeletonRows(PAGE_SIZE)}</div>
+            <div class="cf-q-pagination-bottom"></div>
         </div>`;
 
     const $ = (sel) => root.querySelector(sel);
-    const list      = $('.cf-rows');
-    const msg       = $('.cf-status-msg');
-    const searchEl  = $('.cf-search');
-    const kindEl    = $('.cf-kind');
-    const statsTab  = $('.cf-stats-tab');
-    const statsAll  = $('.cf-stats-total');
-    const pagTop    = $('.cf-pagination-top');
-    const pagBottom = $('.cf-pagination-bottom');
+    const list      = $('.cf-q-rows');
+    const msg       = $('.cf-q-status-msg');
+    const searchEl  = $('.cf-q-search');
+    const kindEl    = $('.cf-q-kind');
+    const pagTop    = $('.cf-q-pagination-top');
+    const pagBottom = $('.cf-q-pagination-bottom');
 
     function applySearch(items) {
         if (!searchTerm) return items;
@@ -279,15 +296,14 @@ export async function render(root) {
         if (currentPage > totalPages) currentPage = totalPages;
         const slice = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
-        statsTab.textContent = filtered.length + ' in view';
         list.innerHTML = slice.length
-            ? slice.map(r => renderCard(r, isAdmin)).join('')
+            ? slice.map(r => renderRow(r, isAdmin)).join('')
             : renderEmpty(searchTerm ? 'No matches for that search.' : null);
-        pagTop.innerHTML    = renderPagination(currentPage, totalPages, 'top');
-        pagBottom.innerHTML = renderPagination(currentPage, totalPages, 'bottom');
 
-        // Kick off lazy cover loading for the cards just rendered. Cancel
-        // any prior chain so paginating doesn't pile up requests.
+        const pagHtml = renderPagination(currentPage, totalPages, allItems.length, filtered.length);
+        pagTop.innerHTML    = pagHtml;
+        pagBottom.innerHTML = pagHtml;
+
         coverAbort.abort();
         coverAbort = new AbortController();
         void fillMissingCovers(list, coverAbort.signal);
@@ -295,7 +311,7 @@ export async function render(root) {
 
     async function refresh() {
         msg.textContent = '';
-        list.innerHTML = renderLoading();
+        list.innerHTML = skeletonRows(PAGE_SIZE);
         pagTop.innerHTML = '';
         pagBottom.innerHTML = '';
         try {
@@ -309,46 +325,47 @@ export async function render(root) {
             items.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
             allItems = items;
             currentPage = 1;
-            statsAll.textContent = items.length + ' total';
             renderPage();
         } catch (err) {
             list.innerHTML = renderError(err);
-            statsAll.textContent = '— total';
-            statsTab.textContent = '— in view';
         }
     }
 
-    // Status sub-tabs
-    root.querySelectorAll('.cf-status-tabs button').forEach((b) => {
+    // status sub-tabs
+    root.querySelectorAll('.cf-q-tabs button').forEach((b) => {
         b.addEventListener('click', () => {
-            root.querySelectorAll('.cf-status-tabs button').forEach((x) => x.classList.remove('active'));
+            root.querySelectorAll('.cf-q-tabs button').forEach((x) => x.classList.remove('active'));
             b.classList.add('active');
             activeTab = STATUS_TABS.find((t) => t.id === b.dataset.tab) || STATUS_TABS[0];
             void refresh();
         });
     });
 
-    // Per-card admin actions
+    // per-row admin actions
     if (isAdmin) {
         list.addEventListener('click', async (e) => {
-            const btn = e.target.closest('button');
-            if (!btn || btn.classList.contains('pagination-btn')) return;
-            const card = btn.closest('.movie-card[data-id]');
-            if (!card) return;
-            const id = parseInt(card.dataset.id, 10);
+            const btn = e.target.closest('button.cf-q-iconbtn');
+            if (!btn) return;
+            const row = btn.closest('.cf-q-row[data-id]');
+            if (!row) return;
+            const id = parseInt(row.dataset.id, 10);
             try {
-                if (btn.classList.contains('cf-retry')) {
+                if (btn.classList.contains('cf-q-retry')) {
                     await api.retryRequest(id);
                     msg.textContent = 'Reset to wanted.';
-                } else if (btn.classList.contains('cf-refresh-meta')) {
+                } else if (btn.classList.contains('cf-q-refresh-meta')) {
                     msg.textContent = 'Refreshing metadata…';
                     await api.refreshMetadata(id);
                     msg.textContent = 'Metadata refreshed.';
-                } else if (btn.classList.contains('cf-regrab')) {
+                } else if (btn.classList.contains('cf-q-regrab')) {
                     if (!confirm('Delete the existing file and re-search? This cannot be undone.')) return;
                     msg.textContent = 'Re-grabbing…';
                     await api.regrabRequest(id);
                     msg.textContent = 'Re-grab kicked off.';
+                } else if (btn.classList.contains('cf-q-remove')) {
+                    if (!confirm('Remove this from the queue? The watchlist entry stays — you can add it again from Discover.')) return;
+                    await api.deleteRequest(id);
+                    msg.textContent = 'Removed from queue.';
                 }
                 await refresh();
             } catch (err) {
@@ -356,7 +373,7 @@ export async function render(root) {
             }
         });
 
-        const sweep = root.querySelector('.cf-sweep');
+        const sweep = root.querySelector('.cf-q-sweep');
         if (sweep) sweep.addEventListener('click', async () => {
             try {
                 await api.triggerSweep();
@@ -368,10 +385,10 @@ export async function render(root) {
         });
     }
 
-    // Pagination delegation
+    // pagination delegation
     [pagTop, pagBottom].forEach((host) => {
         host.addEventListener('click', (e) => {
-            const btn = e.target.closest('button.pagination-btn');
+            const btn = e.target.closest('button.cf-q-page-btn');
             if (!btn || btn.classList.contains('disabled') || btn.classList.contains('active')) return;
             const target = parseInt(btn.dataset.page, 10);
             if (!Number.isFinite(target)) return;
@@ -381,7 +398,7 @@ export async function render(root) {
         });
     });
 
-    root.querySelector('.cf-refresh').addEventListener('click', refresh);
+    root.querySelector('.cf-q-refresh').addEventListener('click', refresh);
     kindEl.addEventListener('change', () => { kindFilter = kindEl.value; void refresh(); });
 
     let searchDebounce;

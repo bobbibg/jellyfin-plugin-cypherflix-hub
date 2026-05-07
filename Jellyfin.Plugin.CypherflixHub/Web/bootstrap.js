@@ -107,6 +107,26 @@
                 headers: { 'X-Emby-Token': tok },
             }).then((r) => (r.ok ? r.json() : null));
             if (!cfg || !Array.isArray(cfg.Tabs)) return;
+
+            // Re-title "Manage" → "Queue" if the user's existing config still
+            // says Manage. ContentHtml stays the same (anchor div is the
+            // contract); we just change the visible label. PUT the updated
+            // config back via /Plugins/{id}/Configuration if anything changed.
+            let cfgDirty = false;
+            for (const t of cfg.Tabs) {
+                if (t && t.ContentHtml && t.ContentHtml.indexOf('cypherflix-manage') !== -1 && t.Title === 'Manage') {
+                    t.Title = 'Queue';
+                    cfgDirty = true;
+                }
+            }
+            if (cfgDirty) {
+                try {
+                    if (window.ApiClient && typeof window.ApiClient.updatePluginConfiguration === 'function') {
+                        await window.ApiClient.updatePluginConfiguration(ct.Id, cfg);
+                    }
+                } catch (_) { /* non-fatal */ }
+            }
+
             const ourSigs = ['cypherflix-discover', 'cypherflix-manage'];
             for (let i = 0; i < cfg.Tabs.length; i++) {
                 const t = cfg.Tabs[i] || {};

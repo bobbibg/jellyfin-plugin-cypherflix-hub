@@ -64,6 +64,33 @@
                     <span>Save</span>
                 </button>
             </form>
+
+            <h2 style="margin-top: 2em;">Creator blocklist</h2>
+            <div class="fieldDescription" style="margin-bottom: 1em;">
+                Anything any of these creators had involvement with — books,
+                comics, manga, movies, TV — is hidden from Discover, Search,
+                and Coming Soon. Items already in your library / queue stay
+                in place. Aliases catch pseudonyms (e.g. add
+                <em>Robert Galbraith</em> alongside <em>J.K. Rowling</em>).
+            </div>
+
+            <div id="cfBlocklistTable" style="margin-bottom: 1em;"></div>
+
+            <form id="cfBlocklistAddForm" style="background: rgba(255,255,255,0.04); padding: 1em; border-radius: 8px;">
+                <h3 style="margin: 0 0 0.6em;">Add a blocked creator</h3>
+                <div class="inputContainer">
+                    <input is="emby-input" id="cfBlocklistName" type="text" required label="Canonical name" placeholder="e.g. J.K. Rowling" />
+                </div>
+                <div class="inputContainer">
+                    <input is="emby-input" id="cfBlocklistAliases" type="text" label="Aliases (comma-separated)" placeholder="JK Rowling, Joanne Rowling, Robert Galbraith" />
+                </div>
+                <div class="inputContainer">
+                    <input is="emby-input" id="cfBlocklistReason" type="text" label="Reason (optional)" placeholder="Why this creator is blocked" />
+                </div>
+                <button is="emby-button" type="submit" class="raised button-submit block">
+                    <span>Add to blocklist</span>
+                </button>
+            </form>
         </div>
     </div>
     <script type="text/javascript">
@@ -89,6 +116,106 @@
                             .then(Dashboard.processPluginConfigurationUpdateResult);
                     });
                     return false;
+                });
+
+            // ------- creator blocklist admin UI -------------------------
+            // Talks to our own reverse-proxy controller at /Cypherflix/api/*
+            // since [Authorize] gates it the same way the Hub UI does.
+            function cfApiHeaders() {
+                var tok = ApiClient.accessToken();
+                return { 'X-Emby-Token': tok, 'Content-Type': 'application/json' };
+            }
+            function cfEsc(s) {
+                return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+                    return ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]);
+                });
+            }
+            function cfRenderBlocklist(rows) {
+                var host = document.querySelector('#cfBlocklistTable');
+                if (!Array.isArray(rows) || !rows.length) {
+                    host.innerHTML = '<p style="color: rgba(255,255,255,0.5); font-style: italic;">No creators blocked yet.</p>';
+                    return;
+                }
+                var html = '<table style="width:100%; border-collapse:collapse;">';
+                html += '<thead><tr>' +
+                    '<th style="text-align:left; padding:0.5em; border-bottom:1px solid rgba(255,255,255,0.15);">Name</th>' +
+                    '<th style="text-align:left; padding:0.5em; border-bottom:1px solid rgba(255,255,255,0.15);">Aliases</th>' +
+                    '<th style="text-align:left; padding:0.5em; border-bottom:1px solid rgba(255,255,255,0.15);">Provider IDs</th>' +
+                    '<th style="text-align:left; padding:0.5em; border-bottom:1px solid rgba(255,255,255,0.15);">Reason</th>' +
+                    '<th style="border-bottom:1px solid rgba(255,255,255,0.15);"></th>' +
+                    '</tr></thead><tbody>';
+                rows.forEach(function (r) {
+                    var aliases = [];
+                    try { aliases = JSON.parse(r.aliases_json || r.aliases || '[]'); } catch (_) {}
+                    var providers = [];
+                    if (r.hardcover_author_id) providers.push('HC:' + r.hardcover_author_id);
+                    if (r.comicvine_person_id) providers.push('CV:' + r.comicvine_person_id);
+                    if (r.tmdb_person_id) providers.push('TMDB:' + r.tmdb_person_id);
+                    if (r.anilist_staff_id) providers.push('AL:' + r.anilist_staff_id);
+                    html += '<tr data-id="' + r.id + '">' +
+                        '<td style="padding:0.6em 0.5em;"><strong>' + cfEsc(r.canonical_name) + '</strong></td>' +
+                        '<td style="padding:0.6em 0.5em; color:rgba(255,255,255,0.7);">' + cfEsc(aliases.join(', ')) + '</td>' +
+                        '<td style="padding:0.6em 0.5em; font-size:12px; color:rgba(255,255,255,0.6);">' + cfEsc(providers.join(' · ') || 'name match only') + '</td>' +
+                        '<td style="padding:0.6em 0.5em; color:rgba(255,255,255,0.7);">' + cfEsc(r.reason || '') + '</td>' +
+                        '<td style="padding:0.6em 0.5em; text-align:right;">' +
+                            '<button type="button" class="cf-bl-refresh" title="Refresh provider IDs" style="margin-right:0.4em;">↻</button>' +
+                            '<button type="button" class="cf-bl-remove" title="Remove from blocklist">✕</button>' +
+                        '</td>' +
+                        '</tr>';
+                });
+                html += '</tbody></table>';
+                host.innerHTML = html;
+            }
+            function cfReloadBlocklist() {
+                fetch('/Cypherflix/api/blocklist/creators', { headers: cfApiHeaders() })
+                    .then(function (r) { return r.json(); })
+                    .then(function (j) { cfRenderBlocklist(j.items || j); })
+                    .catch(function (err) {
+                        document.querySelector('#cfBlocklistTable').innerHTML =
+                            '<p style="color:#ff8b8b;">Failed to load: ' + cfEsc(err.message || String(err)) + '</p>';
+                    });
+            }
+            document.querySelector('#cypherflixHubConfigurationPage')
+                .addEventListener('pageshow', cfReloadBlocklist);
+            document.querySelector('#cfBlocklistAddForm')
+                .addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    var name = document.querySelector('#cfBlocklistName').value.trim();
+                    if (!name) return false;
+                    var aliasesRaw = document.querySelector('#cfBlocklistAliases').value;
+                    var aliases = aliasesRaw.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+                    var reason = document.querySelector('#cfBlocklistReason').value.trim() || null;
+                    fetch('/Cypherflix/api/blocklist/creators', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: cfApiHeaders(),
+                        body: JSON.stringify({ canonical_name: name, aliases: aliases, reason: reason })
+                    }).then(function (r) {
+                        if (!r.ok) throw new Error('HTTP ' + r.status);
+                        document.querySelector('#cfBlocklistName').value = '';
+                        document.querySelector('#cfBlocklistAliases').value = '';
+                        document.querySelector('#cfBlocklistReason').value = '';
+                        cfReloadBlocklist();
+                    }).catch(function (err) {
+                        alert('Failed to add: ' + (err.message || String(err)));
+                    });
+                    return false;
+                });
+            document.querySelector('#cfBlocklistTable')
+                .addEventListener('click', function (e) {
+                    var row = e.target.closest('tr[data-id]');
+                    if (!row) return;
+                    var id = row.dataset.id;
+                    if (e.target.classList.contains('cf-bl-remove')) {
+                        if (!confirm('Remove this creator from the blocklist?')) return;
+                        fetch('/Cypherflix/api/blocklist/creators/' + id, {
+                            method: 'DELETE', credentials: 'same-origin', headers: cfApiHeaders()
+                        }).then(cfReloadBlocklist).catch(function (err) { alert(err.message); });
+                    } else if (e.target.classList.contains('cf-bl-refresh')) {
+                        fetch('/Cypherflix/api/blocklist/creators/' + id + '/refresh', {
+                            method: 'POST', credentials: 'same-origin', headers: cfApiHeaders()
+                        }).then(cfReloadBlocklist).catch(function (err) { alert(err.message); });
+                    }
                 });
         }());
     </script>
