@@ -106,10 +106,41 @@ function renderCategoryRow(cat) {
                 <h2 class="cf-d-row-title">${escapeHtml(cat.title)}</h2>
                 <span class="cf-d-row-status"></span>
             </header>
-            <div class="cf-d-row-scroller">
-                ${Array(8).fill(skeletonCard('cf-d-poster-portrait')).join('')}
+            <div class="cf-d-row-viewport">
+                <button type="button" class="cf-d-row-arrow cf-d-row-arrow-left disabled" aria-label="Scroll left">
+                    <span class="material-icons">chevron_left</span>
+                </button>
+                <div class="cf-d-row-scroller">
+                    ${Array(8).fill(skeletonCard('cf-d-poster-portrait')).join('')}
+                </div>
+                <button type="button" class="cf-d-row-arrow cf-d-row-arrow-right" aria-label="Scroll right">
+                    <span class="material-icons">chevron_right</span>
+                </button>
             </div>
         </section>`;
+}
+
+function updateRowArrows(rowEl) {
+    const scroller = rowEl.querySelector('.cf-d-row-scroller');
+    const left  = rowEl.querySelector('.cf-d-row-arrow-left');
+    const right = rowEl.querySelector('.cf-d-row-arrow-right');
+    if (!scroller || !left || !right) return;
+    const atStart = scroller.scrollLeft <= 4;
+    const atEnd   = scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 4;
+    left.classList.toggle('disabled', atStart);
+    right.classList.toggle('disabled', atEnd);
+}
+
+function attachRowArrows(rowEl) {
+    const scroller = rowEl.querySelector('.cf-d-row-scroller');
+    const left  = rowEl.querySelector('.cf-d-row-arrow-left');
+    const right = rowEl.querySelector('.cf-d-row-arrow-right');
+    if (!scroller || !left || !right) return;
+    const step = () => Math.max(scroller.clientWidth * 0.85, 200);
+    left .addEventListener('click', () => scroller.scrollBy({ left: -step(), behavior: 'smooth' }));
+    right.addEventListener('click', () => scroller.scrollBy({ left:  step(), behavior: 'smooth' }));
+    scroller.addEventListener('scroll', () => updateRowArrows(rowEl), { passive: true });
+    requestAnimationFrame(() => updateRowArrows(rowEl));
 }
 
 async function loadCategoryRow(rowEl, cat, msg) {
@@ -128,6 +159,8 @@ async function loadCategoryRow(rowEl, cat, msg) {
             try { card.dataset.payload = JSON.stringify(items[i]); } catch (_) {}
         });
         status.textContent = items.length + (items.length === 1 ? ' item' : ' items');
+        // Refresh arrow disabled state once content has rendered
+        requestAnimationFrame(() => updateRowArrows(rowEl));
     } catch (err) {
         scroller.innerHTML = '<div class="cf-d-row-empty">Error: ' + escapeHtml(err.message || String(err)) + '</div>';
         if (msg) msg.textContent = 'Error loading "' + cat.title + '": ' + (err.message || String(err));
@@ -145,18 +178,29 @@ async function handleAddToQueue(card, msg) {
         return;
     }
     const body = { kind: item.watchlist_kind, ...item.watchlist_payload };
+    const btn = card.querySelector('.cf-d-card-cta');
     try {
         await api.createWatchlist(body);
         msg.textContent = 'Added to queue.';
-        const btn = card.querySelector('.cf-d-card-cta');
-        if (btn) {
-            btn.innerHTML = '<span class="material-icons">check</span><span>Queued</span>';
-            btn.disabled = true;
-            btn.classList.add('cf-d-card-cta-queued');
-        }
+        markQueued(btn, 'Queued');
     } catch (err) {
-        msg.textContent = 'Error: ' + (err.message || String(err));
+        // Duplicate watchlist entry - the grabber returns 409. Treat as
+        // visual success since the user's intent is already true.
+        const m = String(err && err.message || err);
+        if (m.includes('409') || /already|duplicate|exists/i.test(m)) {
+            msg.textContent = 'Already in your queue.';
+            markQueued(btn, 'In queue');
+        } else {
+            msg.textContent = 'Error: ' + m;
+        }
     }
+}
+
+function markQueued(btn, label) {
+    if (!btn) return;
+    btn.innerHTML = '<span class="material-icons">check</span><span>' + label + '</span>';
+    btn.disabled = true;
+    btn.classList.add('cf-d-card-cta-queued');
 }
 
 // --- search ---------------------------------------------------------------
@@ -222,7 +266,9 @@ export async function render(root) {
     // load each category in parallel; row stays skeleton until its data lands
     CATEGORIES.forEach((cat) => {
         const rowEl = root.querySelector('[data-row-id="' + cat.id + '"]');
-        if (rowEl) void loadCategoryRow(rowEl, cat, msg);
+        if (!rowEl) return;
+        attachRowArrows(rowEl);
+        void loadCategoryRow(rowEl, cat, msg);
     });
 
     // search — debounced; when active hide the category rows

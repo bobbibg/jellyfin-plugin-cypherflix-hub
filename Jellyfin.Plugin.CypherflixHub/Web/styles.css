@@ -37,7 +37,9 @@
 }
 
 .cf-glass-backdrop {
-    position: absolute;
+    /* Full-viewport fixed backdrop so it covers the whole window even when
+       the user scrolls, rather than ending at the bottom of the anchor div. */
+    position: fixed;
     inset: 0;
     z-index: 0;
     pointer-events: none;
@@ -46,8 +48,6 @@
         rgba(15, 17, 28, 0.75) 100%);
     backdrop-filter: blur(24px) saturate(140%);
     -webkit-backdrop-filter: blur(24px) saturate(140%);
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
 }
 
 .cf-host > *:not(.cf-glass-backdrop) {
@@ -85,9 +85,11 @@
     -moz-appearance: none;
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 6px;
+    border-radius: 8px;
     color: #fff;
-    padding: 8px 32px 8px 12px;
+    height: 40px;
+    padding: 0 32px 0 12px;
+    box-sizing: border-box;
     font-size: 14px;
     font-family: inherit;
     cursor: pointer;
@@ -106,8 +108,9 @@
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.2);
     color: #fff;
-    border-radius: 6px;
-    width: 38px; height: 38px;
+    border-radius: 8px;
+    width: 40px; height: 40px;
+    box-sizing: border-box;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -435,7 +438,15 @@
     font-size: 13px;
 }
 
-/* Horizontal scroller — full bleed, snaps */
+/* Horizontal viewport — wraps the scroller and hosts the arrow buttons.
+   Mirrors Jellyfin's native horizontal carousels. The scroller still
+   accepts wheel/touch scroll; the arrows give a click target. */
+.cf-d-row-viewport {
+    position: relative;
+    /* Don't overflow horizontally past the row — keeps the body
+       scrollbar from getting horizontal scroll bleed. */
+    overflow: hidden;
+}
 .cf-d-row-scroller {
     display: flex;
     gap: 14px;
@@ -443,13 +454,42 @@
     overflow-y: visible;
     padding: 4px 24px 16px;
     scroll-snap-type: x proximity;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    scroll-behavior: smooth;
+    /* Hide the native scrollbar — arrows handle navigation */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 }
-.cf-d-row-scroller::-webkit-scrollbar { height: 8px; }
-.cf-d-row-scroller::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 4px;
+.cf-d-row-scroller::-webkit-scrollbar { display: none; }
+
+.cf-d-row-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 40px;
+    height: 60px;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 6px;
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 4;
+    opacity: 0;
+    transition: opacity 0.2s ease, background 0.15s ease;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    font-family: inherit;
+}
+.cf-d-row-arrow .material-icons { font-size: 28px; }
+.cf-d-row-arrow:hover { background: rgba(0, 0, 0, 0.78); border-color: rgba(255, 255, 255, 0.35); }
+.cf-d-row-arrow-left  { left: 8px; }
+.cf-d-row-arrow-right { right: 8px; }
+.cf-d-row-arrow.disabled { opacity: 0; pointer-events: none; }
+.cf-d-row-viewport:hover .cf-d-row-arrow:not(.disabled) { opacity: 1; }
+@media (hover: none) {
+    .cf-d-row-arrow:not(.disabled) { opacity: 1; }
 }
 
 .cf-d-row-empty {
@@ -507,13 +547,17 @@
 .cf-d-card-overlay-grad {
     position: absolute;
     inset: 0;
-    background: linear-gradient(
-        to top,
-        rgba(0, 0, 0, 0.92) 0%,
-        rgba(0, 0, 0, 0.65) 35%,
-        rgba(0, 0, 0, 0.15) 70%,
-        transparent 100%
-    );
+    /* Stronger uniform darkening across the whole cover plus a heavier
+       gradient at the bottom where the title/details live — keeps text
+       readable against any cover, no matter how bright. */
+    background:
+        linear-gradient(
+            to top,
+            rgba(0, 0, 0, 0.95) 0%,
+            rgba(0, 0, 0, 0.75) 30%,
+            rgba(0, 0, 0, 0.40) 60%,
+            rgba(0, 0, 0, 0.25) 100%
+        );
 }
 .cf-d-card-overlay-body {
     position: absolute;

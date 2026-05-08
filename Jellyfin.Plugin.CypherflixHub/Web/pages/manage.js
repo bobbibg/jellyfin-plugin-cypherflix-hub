@@ -263,7 +263,7 @@ export async function render(root) {
                 <button class="cf-icon-button cf-q-refresh" title="Refresh">
                     <span class="material-icons">refresh</span>
                 </button>
-                ${isAdmin ? '<button class="cf-icon-button cf-q-sweep" title="Trigger sweep"><span class="material-icons">play_arrow</span></button>' : ''}
+                ${isAdmin ? '<button class="cf-icon-button cf-q-sweep" title="Trigger sweep (run grabber now)"><span class="material-icons">bolt</span></button>' : ''}
             </div>
             <div class="cf-q-status-msg"></div>
             <div class="cf-q-pagination-top"></div>
@@ -309,8 +309,9 @@ export async function render(root) {
         void fillMissingCovers(list, coverAbort.signal);
     }
 
-    async function refresh() {
+    async function refresh({ keepPage = false } = {}) {
         msg.textContent = '';
+        const previousPage = currentPage;
         list.innerHTML = skeletonRows(PAGE_SIZE);
         pagTop.innerHTML = '';
         pagBottom.innerHTML = '';
@@ -324,7 +325,9 @@ export async function render(root) {
             }
             items.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
             allItems = items;
-            currentPage = 1;
+            // Preserve page on row-action refreshes (retry/blocklist/delete);
+            // renderPage clamps if dataset shrunk.
+            currentPage = keepPage ? previousPage : 1;
             renderPage();
         } catch (err) {
             list.innerHTML = renderError(err);
@@ -367,7 +370,8 @@ export async function render(root) {
                     await api.deleteRequest(id);
                     msg.textContent = 'Removed from queue.';
                 }
-                await refresh();
+                // Preserve current page after a row-level action
+                await refresh({ keepPage: true });
             } catch (err) {
                 msg.textContent = 'Error: ' + err.message;
             }
@@ -378,7 +382,7 @@ export async function render(root) {
             try {
                 await api.triggerSweep();
                 msg.textContent = 'Sweep started.';
-                setTimeout(refresh, 1500);
+                setTimeout(() => refresh({ keepPage: true }), 1500);
             } catch (err) {
                 msg.textContent = 'Error: ' + err.message;
             }

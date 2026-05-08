@@ -93,7 +93,6 @@
         const tok = client.accessToken();
         if (!tok) return;
         const base = (typeof client.serverAddress === 'function' ? client.serverAddress() : '') || '';
-        if (haveOurs) return;
         try {
             const plugins = await fetch(base + '/Plugins', {
                 credentials: 'same-origin',
@@ -112,6 +111,9 @@
             // says Manage. ContentHtml stays the same (anchor div is the
             // contract); we just change the visible label. PUT the updated
             // config back via /Plugins/{id}/Configuration if anything changed.
+            // This MUST happen BEFORE the haveOurs early-return below: when
+            // the anchor divs already exist (post-upgrade), we still need
+            // the rename to fire. Title persists in Custom Tabs config.
             let cfgDirty = false;
             for (const t of cfg.Tabs) {
                 if (t && t.ContentHtml && t.ContentHtml.indexOf('cypherflix-manage') !== -1 && t.Title === 'Manage') {
@@ -126,6 +128,9 @@
                     }
                 } catch (_) { /* non-fatal */ }
             }
+
+            // Rename done; skip backfill if our containers are already mounted.
+            if (haveOurs) return;
 
             const ourSigs = ['cypherflix-discover', 'cypherflix-manage'];
             for (let i = 0; i < cfg.Tabs.length; i++) {

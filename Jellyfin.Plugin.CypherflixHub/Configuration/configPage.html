@@ -177,6 +177,10 @@
             }
             document.querySelector('#cypherflixHubConfigurationPage')
                 .addEventListener('pageshow', cfReloadBlocklist);
+            // Jellyfin's SPA dashboard navigation doesn't always fire
+            // `pageshow` for inline plugin pages; trigger an initial load
+            // on script execution as a belt-and-braces fallback.
+            cfReloadBlocklist();
             document.querySelector('#cfBlocklistAddForm')
                 .addEventListener('submit', function (e) {
                     e.preventDefault();
