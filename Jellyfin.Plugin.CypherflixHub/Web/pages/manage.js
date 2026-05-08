@@ -97,7 +97,7 @@ function metaLineFor(r) {
 
 // One row per request — full-width horizontal strip. Cover left, body
 // flex-grow, action cluster right, progress bar across the bottom.
-function renderRow(r, isAdmin) {
+function renderRow(r, isAdmin, isSelected) {
     const poster = r.cover_url
         ? '<img src="' + escapeHtml(r.cover_url) + '" alt="" loading="lazy" />'
         : '<div class="cf-q-poster-placeholder cf-needs-cover" data-request-id="' + r.id + '">' +
@@ -120,8 +120,10 @@ function renderRow(r, isAdmin) {
             ${stuck ? '<button class="cf-q-iconbtn cf-q-remove cf-q-iconbtn-danger" title="Remove from queue"><span class="material-icons">delete_outline</span></button>' : ''}
         </div>` : '';
 
+    const checkClass = isSelected ? ' cf-q-row-selected' : '';
     return `
-        <div class="cf-q-row cf-q-row-status-${r.status}" data-id="${r.id}">
+        <div class="cf-q-row cf-q-row-status-${r.status}${checkClass}" data-id="${r.id}">
+            <label class="cf-q-row-checkbox" title="Select"><input type="checkbox" class="cf-q-row-check" data-id="${r.id}"${isSelected ? ' checked' : ''} /></label>
             <div class="cf-q-row-cover">${poster}</div>
             <div class="cf-q-row-body">
                 <div class="cf-q-row-title">${escapeHtml(primaryTitle(r))}</div>
@@ -242,6 +244,28 @@ export async function render(root) {
     let currentPage = 1;
     let allItems = [];
     let coverAbort = new AbortController();
+    // Multi-select state.
+    //   selectedIds  = Set of explicitly checked ids (when allMode=false)
+    //   excludedIds  = Set of explicitly UN-checked ids (when allMode=true)
+    //   allMode      = Select-all-across-pages active. Effective selection
+    //                  = allItems' ids minus excludedIds.
+    const selectedIds = new Set();
+    const excludedIds = new Set();
+    let allMode = false;
+
+    function isRowSelected(id) {
+        return allMode ? !excludedIds.has(id) : selectedIds.has(id);
+    }
+    function effectiveSelection() {
+        if (!allMode) return [...selectedIds];
+        // applySearch is defined below; the closure captures it lazily
+        return applySearch(allItems).map((r) => r.id).filter((id) => !excludedIds.has(id));
+    }
+    function clearSelection() {
+        selectedIds.clear();
+        excludedIds.clear();
+        allMode = false;
+    }
 
     root.classList.add('cf-host', 'cf-queue-host');
     root.innerHTML = `
@@ -266,6 +290,7 @@ export async function render(root) {
                 ${isAdmin ? '<button class="cf-icon-button cf-q-sweep" title="Trigger sweep (run grabber now)"><span class="material-icons">bolt</span></button>' : ''}
             </div>
             <div class="cf-q-status-msg"></div>
+            <div class="cf-q-bulkbar" hidden></div>
             <div class="cf-q-pagination-top"></div>
             <div class="cf-q-rows">${skeletonRows(PAGE_SIZE)}</div>
             <div class="cf-q-pagination-bottom"></div>
@@ -297,16 +322,63 @@ export async function render(root) {
         const slice = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
         list.innerHTML = slice.length
-            ? slice.map(r => renderRow(r, isAdmin)).join('')
+            ? slice.map(r => renderRow(r, isAdmin, isRowSelected(r.id))).join('')
             : renderEmpty(searchTerm ? 'No matches for that search.' : null);
 
         const pagHtml = renderPagination(currentPage, totalPages, allItems.length, filtered.length);
         pagTop.innerHTML    = pagHtml;
         pagBottom.innerHTML = pagHtml;
+        renderBulkBar(filtered);
 
         coverAbort.abort();
         coverAbort = new AbortController();
         void fillMissingCovers(list, coverAbort.signal);
+    }
+
+    function renderBulkBar(filtered) {
+        const bar = $('.cf-q-bulkbar');
+        const count = effectiveSelection().length;
+        const totalFiltered = filtered.length;
+        if (count === 0) {
+            bar.hidden = true;
+            bar.innerHTML = '';
+            return;
+        }
+        // Show "Select all X across all pages" only when the current
+        // page's items are all checked but allMode isn't yet on AND
+        // there are pages beyond the current view.
+        const sliceStart = (currentPage - 1) * PAGE_SIZE;
+        const slice = filtered.slice(sliceStart, sliceStart + PAGE_SIZE);
+        const sliceAllChecked = slice.length > 0 && slice.every((r) => isRowSelected(r.id));
+        const moreToSelect = !allMode && sliceAllChecked && totalFiltered > slice.length;
+
+        bar.hidden = false;
+        bar.innerHTML = `
+            <span class="cf-q-bulkbar-count">${count} selected</span>
+            ${moreToSelect ? '<button type="button" class="cf-q-bulkbar-link cf-q-bulkbar-selall">Select all ' + totalFiltered + ' across pages</button>' : ''}
+            ${allMode ? '<button type="button" class="cf-q-bulkbar-link cf-q-bulkbar-clearall">Clear all</button>' : '<button type="button" class="cf-q-bulkbar-link cf-q-bulkbar-clear">Clear</button>'}
+            <span class="cf-q-bulkbar-spacer"></span>
+            ${isAdmin ? `
+                <button type="button" class="cf-q-bulkbar-btn cf-q-bulkbar-retry"  title="Retry selected"><span class="material-icons">replay</span><span>Retry</span></button>
+                <button type="button" class="cf-q-bulkbar-btn cf-q-bulkbar-remove cf-q-bulkbar-btn-danger" title="Remove selected"><span class="material-icons">delete_outline</span><span>Remove</span></button>
+            ` : ''}
+        `;
+    }
+
+    async function bulkAction(verb, ids) {
+        const fn = verb === 'retry' ? api.retryRequest : api.deleteRequest;
+        let ok = 0, fail = 0;
+        msg.textContent = verb === 'retry' ? 'Retrying ' + ids.length + '…' : 'Removing ' + ids.length + '…';
+        const CONCURRENCY = 4;
+        let i = 0;
+        async function worker() {
+            while (i < ids.length) {
+                const id = ids[i++];
+                try { await fn(id); ok++; } catch (_) { fail++; }
+            }
+        }
+        await Promise.all(Array(CONCURRENCY).fill(0).map(worker));
+        msg.textContent = (verb === 'retry' ? 'Retried ' : 'Removed ') + ok + (fail ? ' (' + fail + ' failed)' : '');
     }
 
     async function refresh({ keepPage = false } = {}) {
@@ -342,6 +414,54 @@ export async function render(root) {
             activeTab = STATUS_TABS.find((t) => t.id === b.dataset.tab) || STATUS_TABS[0];
             void refresh();
         });
+    });
+
+    // Row checkbox handler. Lives outside the isAdmin gate because reading
+    // is fine for non-admins (they just won't see bulk action buttons).
+    list.addEventListener('change', (e) => {
+        const cb = e.target.closest('.cf-q-row-check');
+        if (!cb) return;
+        const id = parseInt(cb.dataset.id, 10);
+        if (!Number.isFinite(id)) return;
+        if (allMode) {
+            if (cb.checked) excludedIds.delete(id);
+            else excludedIds.add(id);
+        } else {
+            if (cb.checked) selectedIds.add(id);
+            else selectedIds.delete(id);
+        }
+        const row = cb.closest('.cf-q-row');
+        if (row) row.classList.toggle('cf-q-row-selected', cb.checked);
+        renderBulkBar(applySearch(allItems));
+    });
+
+    // Bulk action bar handler
+    const bulkBar = $('.cf-q-bulkbar');
+    bulkBar.addEventListener('click', async (e) => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+        if (btn.classList.contains('cf-q-bulkbar-selall')) {
+            allMode = true;
+            selectedIds.clear();
+            excludedIds.clear();
+            renderPage();
+            return;
+        }
+        if (btn.classList.contains('cf-q-bulkbar-clear') || btn.classList.contains('cf-q-bulkbar-clearall')) {
+            clearSelection();
+            renderPage();
+            return;
+        }
+        if (btn.classList.contains('cf-q-bulkbar-retry') || btn.classList.contains('cf-q-bulkbar-remove')) {
+            const ids = effectiveSelection();
+            if (!ids.length) return;
+            const verb = btn.classList.contains('cf-q-bulkbar-retry') ? 'retry' : 'remove';
+            const noun = verb === 'retry' ? 'reset to wanted' : 'permanently removed';
+            if (!confirm(ids.length + ' item' + (ids.length === 1 ? '' : 's') + ' will be ' + noun + '. Continue?')) return;
+            await bulkAction(verb, ids);
+            clearSelection();
+            await refresh({ keepPage: true });
+        }
     });
 
     // per-row admin actions
