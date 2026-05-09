@@ -27,6 +27,52 @@ function escapeHtml(s) {
     );
 }
 
+// --- toast ----------------------------------------------------------------
+// Jellyfin-native bottom-center snackbar. Tries the RequireJS-bundled
+// toast module first (how IntroSkipper / Send-to-Kindle do it) and
+// falls back to a self-rendered #323232 snackbar matching Jellyfin's
+// native style. 3.5s auto-dismiss with fade.
+
+function showToast(message) {
+    if (typeof window.require === 'function') {
+        try {
+            window.require(['toast'], function (toast) {
+                if (typeof toast === 'function') toast(message);
+                else if (toast && typeof toast.default === 'function') toast.default(message);
+                else if (toast && typeof toast.show === 'function') toast.show(message);
+                else renderFallbackToast(message);
+            }, function () { renderFallbackToast(message); });
+            return;
+        } catch (_) { /* fall through */ }
+    }
+    renderFallbackToast(message);
+}
+
+function renderFallbackToast(message) {
+    let host = document.getElementById('cypherflixToastHost');
+    if (!host) {
+        host = document.createElement('div');
+        host.id = 'cypherflixToastHost';
+        host.style.cssText =
+            'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);' +
+            'z-index:10000;display:flex;flex-direction:column;gap:8px;align-items:center;' +
+            'pointer-events:none;';
+        document.body.appendChild(host);
+    }
+    const toast = document.createElement('div');
+    toast.style.cssText =
+        'background:#323232;color:#fff;padding:0.85em 1.4em;border-radius:4px;' +
+        'box-shadow:0 3px 5px rgba(0,0,0,0.3);font-size:0.95em;' +
+        'opacity:0;transition:opacity 200ms ease-in;';
+    toast.textContent = message;
+    host.appendChild(toast);
+    window.requestAnimationFrame(() => { toast.style.opacity = '1'; });
+    window.setTimeout(() => {
+        toast.style.opacity = '0';
+        window.setTimeout(() => toast.remove(), 250);
+    }, 3500);
+}
+
 function fmtDate(s) {
     if (!s) return '';
     try { return new Date(s).toLocaleDateString(); } catch (_) { return s; }
@@ -174,24 +220,30 @@ async function handleAddToQueue(card, msg) {
     try { item = JSON.parse(card.dataset.payload || '{}'); }
     catch (_) { item = {}; }
     if (!item.watchlist_payload) {
-        msg.textContent = 'No watchlist payload on this item.';
+        showToast('No watchlist payload on this item.');
         return;
     }
+    const title = item.title || item.watchlist_payload.display_name || 'item';
     const body = { kind: item.watchlist_kind, ...item.watchlist_payload };
     const btn = card.querySelector('.cf-d-card-cta');
     try {
-        await api.createWatchlist(body);
-        msg.textContent = 'Added to queue.';
-        markQueued(btn, 'Queued');
+        const res = await api.createWatchlist(body);
+        const existed = res && res.existed === true;
+        showToast(existed ? `Already in your queue: ${title}` : `Added to queue: ${title}`);
+        markQueued(btn, existed ? 'In queue' : 'Queued');
+        // Clear inline status (toast replaces it).
+        if (msg) msg.textContent = '';
     } catch (err) {
-        // Duplicate watchlist entry - the grabber returns 409. Treat as
-        // visual success since the user's intent is already true.
+        // Legacy 409 path — pre-v2.2.0 backend used to surface duplicates as
+        // 409. v2.2.0+ returns 201/200 with existed:true, handled above.
         const m = String(err && err.message || err);
         if (m.includes('409') || /already|duplicate|exists/i.test(m)) {
-            msg.textContent = 'Already in your queue.';
+            showToast(`Already in your queue: ${title}`);
             markQueued(btn, 'In queue');
+            if (msg) msg.textContent = '';
         } else {
-            msg.textContent = 'Error: ' + m;
+            showToast(`Couldn't add ${title}: ${m}`);
+            if (msg) msg.textContent = '';
         }
     }
 }
