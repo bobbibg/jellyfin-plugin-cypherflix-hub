@@ -475,7 +475,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 4;
+    /* Must sit above hovered cards (which lift to z-index: 5 with a
+       scale(1.04) transform) — otherwise the arrow gets covered by
+       whatever card is underneath it on hover. */
+    z-index: 10;
     opacity: 0;
     transition: opacity 0.2s ease, background 0.15s ease;
     backdrop-filter: blur(8px);
@@ -570,9 +573,8 @@
 .cf-d-card:hover,
 .cf-d-card:focus-within {
     transform: translateY(-4px) scale(1.04);
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
     z-index: 5;
-    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    transition: transform 0.25s ease;
 }
 .cf-d-card:hover .cf-d-card-overlay,
 .cf-d-card:focus-within .cf-d-card-overlay {
