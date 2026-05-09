@@ -92,100 +92,129 @@ function aspectClassFor(kind) {
     return 'cf-d-poster-portrait';
 }
 
-// Cover-only card. Title / metadata / CTA live in an overlay that's
-// invisible until hover/focus/touch.
+// v3.1.1 — cards use Jellyfin's EXACT native markup so the active theme
+// styles them for free. Class chain confirmed against a live home-page
+// render via Chrome devtools (the recon DOM-walk):
+//
+//   div.card.overflowPortraitCard.card-hoverable
+//     div.cardBox.cardBox-bottompadded
+//       div.cardScalable
+//         div.cardPadder.cardPadder-overflowPortrait
+//           [optional] span.cardImageIcon.material-icons.<kindIcon>   ← placeholder when no cover_url
+//         a.cardImageContainer.coveredImage.cardContent.itemAction.lazy
+//             style="background-image:url(<cover>)"                   ← Jellyfin paints covers as bg-image
+//             div.cardIndicators                                      ← persistent star / tick badges
+//         div.cardOverlayContainer.itemAction
+//           div.cardOverlayButton-br.flex
+//             button[is=paper-icon-button-light].cardOverlayButton.cardOverlayButton-hover  ← Queue FAB
+//               span.material-icons.cardOverlayButtonIcon.cardOverlayButtonIcon-hover.add
+//       div.cardFooter
+//         div.cardText.cardText-first
+//         div.cardText.cardText-secondary
+//
+// We don't add custom CSS for any of these — Jellyfin's stylesheet
+// handles every visual aspect (hover scale, bottom padding, footer text
+// styles, hover overlay reveal). Only the indicator badges have custom
+// styling, since those are our addition.
 function renderCard(item) {
     const titleParts = [];
     if (item.series_name) titleParts.push(item.series_name);
     if (item.issue_number) titleParts.push('#' + item.issue_number);
     const title = titleParts.join(' ') || item.title || '(untitled)';
 
-    const subtitle = item.authors
-        ? item.authors
-        : (item.title && item.title !== item.series_name ? item.title : '');
+    let secondary = '';
+    if (item.year)        secondary = String(item.year);
+    else if (item.authors) secondary = item.authors.split(',')[0].trim();
 
-    const meta = [];
-    if (item.year)         meta.push(escapeHtml(String(item.year)));
-    if (item.release_date) meta.push(escapeHtml(fmtDate(item.release_date)));
+    const aspectClass    = aspectClassFor(item.kind);
+    const isLandscape    = aspectClass === 'cf-d-poster-landscape';
+    // Native uses cardPadder-overflowPortrait for the home-page overflow
+    // rows (different from cardPadder-portrait used inside detail pages).
+    const wrapperCardCls = isLandscape ? 'overflowBackdropCard'         : 'overflowPortraitCard';
+    const padderCls      = isLandscape ? 'cardPadder-overflowBackdrop'  : 'cardPadder-overflowPortrait';
 
-    const summary = item.summary
-        ? escapeHtml(item.summary.slice(0, 200)) + (item.summary.length > 200 ? '…' : '')
+    // Native paints covers as a CSS background-image on the cardImageContainer
+    // <a> rather than via <img>. Falls back to a cardImageIcon glyph inside
+    // the cardPadder when there's no cover (matches how Jellyfin shows
+    // unknown-item placeholders).
+    const padderInner = item.cover_url
+        ? ''
+        : `<span class="cardImageIcon material-icons ${kindIcon(item.kind)}" aria-hidden="true"></span>`;
+    const coverStyle = item.cover_url
+        ? ` style="background-image:url('${escapeHtml(item.cover_url)}')"`
         : '';
 
-    const poster = item.cover_url
-        ? '<img src="' + escapeHtml(item.cover_url) + '" alt="" loading="lazy" />'
-        : '<div class="cf-d-poster-placeholder"><span class="material-icons">' + kindIcon(item.kind) + '</span></div>';
-
-    // v3.0.1 — persistent indicators slot. Always present in the DOM so the
-    // event-driven re-render just toggles `hidden` rather than rebuilding
-    // the card. State is applied by _refreshCardState after follow_state
-    // resolves; first paint shows nothing if state hasn't loaded yet, then
-    // upgrades on the next event tick.
+    // Indicators wrap in native's .cardIndicators slot (top-right corner of
+    // the cover) — Jellyfin already positions this for us. Inner .indicator
+    // class gives us the rounded-pill look; per-state colour comes from a
+    // small custom modifier.
     const indicators = `
-        <div class="cf-d-card-indicators" hidden>
-            <div class="cf-d-card-indicator cf-d-card-indicator-star" title="Following" hidden>
-                <span class="material-icons">star</span>
+        <div class="cardIndicators cf-d-card-indicators" hidden>
+            <div class="indicator cf-d-card-indicator-star" title="Following" hidden>
+                <span class="material-icons star" aria-hidden="true"></span>
             </div>
-            <div class="cf-d-card-indicator cf-d-card-indicator-queued" title="Queued" hidden>
-                <span class="material-icons">check</span>
+            <div class="indicator cf-d-card-indicator-queued" title="Queued" hidden>
+                <span class="material-icons check" aria-hidden="true"></span>
             </div>
-            <div class="cf-d-card-indicator cf-d-card-indicator-downloaded" title="Downloaded" hidden>
-                <span class="material-icons">check</span>
+            <div class="indicator cf-d-card-indicator-downloaded" title="Downloaded" hidden>
+                <span class="material-icons check" aria-hidden="true"></span>
             </div>
         </div>`;
 
-    // v3.0: secondary "+ Follow" link in the hover overlay. The discover-item
-    // shape carries a watchlist_payload that names the relevant author or
-    // series; the link copy reflects that target. Falls back to no link when
-    // the item doesn't expose a follow target.
-    const wp = item.watchlist_payload;
-    const followLabel = wp && wp.display_name
-        ? (wp.kind === 'book_author' ? 'Follow ' + wp.display_name :
-           wp.kind === 'book_series' ? 'Follow series' :
-           wp.kind === 'comic_series' ? 'Follow ' + wp.display_name : 'Follow')
-        : null;
-    const followLink = followLabel
-        ? '<button type="button" class="cf-d-card-follow"><span class="material-icons">add</span><span>' + escapeHtml(followLabel) + '</span></button>'
-        : '';
+    // Native hover overlay — same shape as the home page's hover-reveal
+    // (paper-icon-button-light, .cardOverlayButton-hover, sitting in the
+    // .cardOverlayButton-br.flex bottom-row cluster). Just our `add` icon
+    // instead of native's `play_arrow`.
+    const queueFab = `
+        <div class="cardOverlayContainer itemAction">
+            <div class="cardOverlayButton-br flex">
+                <button is="paper-icon-button-light" type="button"
+                        class="cardOverlayButton cardOverlayButton-hover paper-icon-button-light cf-d-card-queue-fab"
+                        title="Queue this">
+                    <span class="material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover add" aria-hidden="true"></span>
+                </button>
+            </div>
+        </div>`;
 
     return `
-        <div class="cf-d-card ${aspectClassFor(item.kind)}"
+        <div class="card ${wrapperCardCls} card-hoverable cf-d-card"
              data-source="${escapeHtml(item.source || '')}"
              data-source-id="${escapeHtml(item.source_id || '')}"
              data-kind="${escapeHtml(item.kind || '')}"
              tabindex="0">
-            <div class="cf-d-card-poster">${poster}${indicators}</div>
-            <div class="cf-d-card-overlay">
-                <div class="cf-d-card-overlay-grad"></div>
-                <div class="cf-d-card-overlay-body">
-                    <div class="cf-d-card-title">${escapeHtml(title)}</div>
-                    ${subtitle ? '<div class="cf-d-card-subtitle">' + escapeHtml(subtitle) + '</div>' : ''}
-                    ${meta.length ? '<div class="cf-d-card-meta">' + meta.join(' · ') + '</div>' : ''}
-                    ${summary ? '<div class="cf-d-card-summary">' + summary + '</div>' : ''}
-                    <div class="cf-d-card-actions">
-                        <button class="cf-d-card-cta">
-                            <span class="material-icons">add</span>
-                            <span>Queue</span>
-                        </button>
-                        ${followLink}
+            <div class="cardBox cardBox-bottompadded">
+                <div class="cardScalable">
+                    <div class="cardPadder ${padderCls}">
+                        ${padderInner}
                     </div>
+                    <a class="cardImageContainer coveredImage cardContent itemAction lazy"
+                       href="#/cypherflix/details?kind=${encodeURIComponent(item.kind || '')}&source_id=${encodeURIComponent(item.source_id || '')}"
+                       ${coverStyle}>
+                        ${indicators}
+                    </a>
+                    ${queueFab}
+                </div>
+                <div class="cardFooter">
+                    <div class="cardText cardText-first" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
+                    ${secondary ? '<div class="cardText cardText-secondary">' + escapeHtml(secondary) + '</div>' : ''}
                 </div>
             </div>
         </div>`;
 }
 
-/** Apply current follow_state to a card's indicators + Queue button visibility. */
+/** Apply current follow_state to a card's persistent indicators + Queue
+ *  FAB visibility. v3.1.1 dropped the per-card Follow link entirely; the
+ *  Follow action lives on the detail page only. */
 function _refreshCardState(card, fs) {
     let item = null;
     try { item = JSON.parse(card.dataset.payload || '{}'); } catch (_) {}
     if (!item) return;
 
-    const indContainer = card.querySelector('.cf-d-card-indicators');
-    const star = card.querySelector('.cf-d-card-indicator-star');
-    const queuedDot = card.querySelector('.cf-d-card-indicator-queued');
+    const indContainer  = card.querySelector('.cf-d-card-indicators');
+    const star          = card.querySelector('.cf-d-card-indicator-star');
+    const queuedDot     = card.querySelector('.cf-d-card-indicator-queued');
     const downloadedDot = card.querySelector('.cf-d-card-indicator-downloaded');
-    const queueBtn = card.querySelector('.cf-d-card-cta');
-    const followLink = card.querySelector('.cf-d-card-follow');
+    const queueFab      = card.querySelector('.cf-d-card-queue-fab');
 
     const isFollowed = fs.isFollowing(item.watchlist_payload);
     const queueState = fs.getQueueState(item);
@@ -197,48 +226,58 @@ function _refreshCardState(card, fs) {
         indContainer.hidden = !(isFollowed || queueState !== 'none');
     }
 
-    // Queue button vanishes once queued (any state). The space simply
-    // collapses — no jumping; Follow link reflows naturally.
-    if (queueBtn) queueBtn.hidden = (queueState !== 'none');
-
-    // Follow link visual state mirrors star.
-    if (followLink) {
-        if (isFollowed) {
-            followLink.classList.add('cf-d-card-follow-active');
-            const labelSpan = followLink.querySelectorAll('span')[1];
-            if (labelSpan) labelSpan.textContent = 'Following';
-        } else {
-            followLink.classList.remove('cf-d-card-follow-active');
-        }
-    }
+    // Queue FAB hides once queued — native pattern: the resume FAB
+    // disappears once the item is fully played. Same idea here.
+    if (queueFab) queueFab.hidden = (queueState !== 'none');
 }
 
 function skeletonCard(aspectClass) {
+    // Skeleton uses the same native .card chain so dimensions match real
+    // cards perfectly and we get the same scroll-snap behaviour. The
+    // shimmer lives on the cardImageContainer.
+    const isLandscape = aspectClass === 'cf-d-poster-landscape';
+    const wrapper = isLandscape ? 'overflowBackdropCard'        : 'overflowPortraitCard';
+    const padder  = isLandscape ? 'cardPadder-overflowBackdrop' : 'cardPadder-overflowPortrait';
     return `
-        <div class="cf-d-card cf-d-card-skeleton ${aspectClass}">
-            <div class="cf-d-card-poster cf-q-skeleton-shimmer"></div>
+        <div class="card ${wrapper} cf-d-card-skeleton">
+            <div class="cardBox cardBox-bottompadded">
+                <div class="cardScalable">
+                    <div class="cardPadder ${padder}"></div>
+                    <div class="cardImageContainer coveredImage cardContent cf-q-skeleton-shimmer"></div>
+                </div>
+                <div class="cardFooter">
+                    <div class="cardText cardText-first cf-q-skeleton-shimmer" style="height:14px"></div>
+                </div>
+            </div>
         </div>`;
 }
 
-// v3.1 — recon-matched native carousel structure. Recon against jellyfin-web's
-// itemDetails template confirmed the exact pattern:
-//   <div class="verticalSection detailVerticalSection ...">
-//     <h2 class="sectionTitle sectionTitle-cards padded-right">TITLE</h2>
-//     <div is="emby-scroller" class="padded-top-focusscale padded-bottom-focusscale no-padding" data-centerfocus="true">
-//       <div is="emby-itemscontainer" class="scrollSlider focuscontainer-x itemsContainer">
-//         <!-- cards -->
-//       </div>
-//     </div>
-//   </div>
+// v3.1.1 — recon against the live home page (Chrome devtools DOM walk)
+// confirmed the exact home-row markup:
+//
+//   div.verticalSection.emby-scroller-container
+//     div.sectionTitleContainer.sectionTitleContainer-cards.padded-left
+//       h2.sectionTitle.sectionTitle-cards   (no padding classes — wrapper has them)
+//     div[is=emby-scroller].padded-top-focusscale.padded-bottom-focusscale.emby-scroller
+//         data-centerfocus="true" data-scroll-mode-x="custom"
+//       div[is=emby-itemscontainer].itemsContainer.scrollSlider.focuscontainer-x.animatedScrollX
+//
+// We previously had `.no-padding` on the scroller (which prevented the
+// horizontal padding native depends on for proper edge alignment) and
+// were missing `.emby-scroller-container`, `.sectionTitleContainer*`,
+// `.animatedScrollX`, and `data-scroll-mode-x="custom"`. Fixed.
 function renderCategoryRow(cat) {
     return `
-        <div class="verticalSection detailVerticalSection cf-d-row" data-row-id="${escapeHtml(cat.id)}">
-            <h2 class="sectionTitle sectionTitle-cards padded-left padded-right">
-                <span class="cf-d-row-title">${escapeHtml(cat.title)}</span>
-                <span class="cf-d-row-status"></span>
-            </h2>
-            <div is="emby-scroller" class="padded-top-focusscale padded-bottom-focusscale no-padding" data-centerfocus="true">
-                <div is="emby-itemscontainer" class="scrollSlider focuscontainer-x itemsContainer">
+        <div class="verticalSection emby-scroller-container cf-d-row" data-row-id="${escapeHtml(cat.id)}">
+            <div class="sectionTitleContainer sectionTitleContainer-cards padded-left">
+                <h2 class="sectionTitle sectionTitle-cards">
+                    <span class="cf-d-row-title">${escapeHtml(cat.title)}</span>
+                    <span class="cf-d-row-status"></span>
+                </h2>
+            </div>
+            <div is="emby-scroller" class="padded-top-focusscale padded-bottom-focusscale emby-scroller"
+                 data-centerfocus="true" data-scroll-mode-x="custom">
+                <div is="emby-itemscontainer" class="itemsContainer scrollSlider focuscontainer-x animatedScrollX">
                     ${Array(8).fill(skeletonCard('cf-d-poster-portrait')).join('')}
                 </div>
             </div>
@@ -509,41 +548,24 @@ export async function render(root) {
     });
     searchKind.addEventListener('change', () => { lastQuery = ''; triggerSearch(); });
 
-    // v3.0: delegated click handler covers Queue button, Follow link, and
-    // click-to-detail-page (clicking the card body anywhere away from the
-    // action buttons opens the Item Detail modal). All three live on the
-    // .cf-d-card surface so one listener handles the lot.
+    // v3.1.1: navigation is now driven by the native <a class="cardImageContainer"
+    // href="#/cypherflix/details?..."> on each card — clicks on the cover
+    // simply trigger the browser's hashchange and our bootstrap router
+    // mounts the detail page. We only need to intercept the Queue FAB
+    // (preventDefault + stopPropagation, otherwise the surrounding <a>
+    // would also navigate).
     root.addEventListener('click', async (e) => {
-        const queueBtn = e.target.closest('.cf-d-card-cta');
+        const queueBtn = e.target.closest('.cf-d-card-queue-fab');
         if (queueBtn) {
+            e.preventDefault();
+            e.stopPropagation();
             const card = queueBtn.closest('.cf-d-card[data-source-id]');
             if (card) await handleAddToQueue(card, msg);
-            e.stopPropagation();
             return;
         }
-        const followBtn = e.target.closest('.cf-d-card-follow');
-        if (followBtn) {
-            const card = followBtn.closest('.cf-d-card[data-source-id]');
-            if (!card) return;
-            try {
-                const item = JSON.parse(card.dataset.payload || '{}');
-                await handleFollow(card, item.watchlist_payload);
-            } catch (_) { /* ignore */ }
-            e.stopPropagation();
-            return;
-        }
-        const card = e.target.closest('.cf-d-card[data-source-id]');
-        if (card) {
-            // v3.1: navigate to the standalone detail route. The bootstrap
-            // hashchange hook mounts the page into the active .libraryPage
-            // and Jellyfin's back button restores the previous tab+scroll.
-            const kind = card.dataset.kind;
-            const sourceId = card.dataset.sourceId;
-            if (kind && sourceId) {
-                window.location.hash =
-                    '#/cypherflix/details?kind=' + encodeURIComponent(kind) +
-                    '&source_id=' + encodeURIComponent(sourceId);
-            }
-        }
+        // v3.1.1: card-body navigation is handled by the native <a class="cardImageContainer"
+        // href="#/cypherflix/details?..."> on each card — the browser fires
+        // hashchange and bootstrap mounts the detail page. No manual handler
+        // needed.
     });
 }

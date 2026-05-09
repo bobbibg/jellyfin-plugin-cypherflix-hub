@@ -438,65 +438,11 @@
     font-size: 13px;
 }
 
-/* Horizontal viewport — wraps the scroller and hosts the arrow buttons.
-   Mirrors Jellyfin's native horizontal carousels. The scroller still
-   accepts wheel/touch scroll; the arrows give a click target. */
-.cf-d-row-viewport {
-    position: relative;
-    /* Don't overflow horizontally past the row — keeps the body
-       scrollbar from getting horizontal scroll bleed. */
-    overflow: hidden;
-}
-.cf-d-row-scroller {
-    display: flex;
-    gap: 14px;
-    overflow-x: auto;
-    overflow-y: visible;
-    /* Match Jellyfin's homeSection content padding (3.3em) so the first
-       and last cards in a row line up with the page-level grid instead of
-       hugging the viewport edge when the user has scrolled to the start. */
-    padding: 4px 3.3em 16px;
-    scroll-snap-type: x proximity;
-    scroll-behavior: smooth;
-    /* Hide the native scrollbar — arrows handle navigation */
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-}
-.cf-d-row-scroller::-webkit-scrollbar { display: none; }
-
-.cf-d-row-arrow {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 40px;
-    height: 60px;
-    background: rgba(0, 0, 0, 0.55);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    border-radius: 6px;
-    color: #fff;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    /* Must sit above hovered cards (which lift to z-index: 5 with a
-       scale(1.04) transform) — otherwise the arrow gets covered by
-       whatever card is underneath it on hover. */
-    z-index: 10;
-    opacity: 0;
-    transition: opacity 0.2s ease, background 0.15s ease;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    font-family: inherit;
-}
-.cf-d-row-arrow .material-icons { font-size: 28px; }
-.cf-d-row-arrow:hover { background: rgba(0, 0, 0, 0.78); border-color: rgba(255, 255, 255, 0.35); }
-.cf-d-row-arrow-left  { left: 8px; }
-.cf-d-row-arrow-right { right: 8px; }
-.cf-d-row-arrow.disabled { opacity: 0; pointer-events: none; }
-.cf-d-row-viewport:hover .cf-d-row-arrow:not(.disabled) { opacity: 1; }
-@media (hover: none) {
-    .cf-d-row-arrow:not(.disabled) { opacity: 1; }
-}
+/* v3.1.1: scroller + arrow behaviour comes entirely from Jellyfin's
+   native .emby-scroller / [is="emby-scroller"] / .animatedScrollX
+   classes. We removed the cf-d-row-scroller / cf-d-row-arrow rules — the
+   row visuals (horizontal padding, arrow buttons that appear on hover,
+   scroll-snap, scroll-behaviour) are all theme-driven now. */
 
 .cf-d-row-empty {
     padding: 32px 24px;
@@ -504,156 +450,31 @@
     font-style: italic;
 }
 
-/* The card — cover-only by default */
-.cf-d-card {
-    flex: 0 0 auto;
-    position: relative;
-    border-radius: 8px;
-    overflow: hidden;
-    cursor: pointer;
-    scroll-snap-align: start;
-    transition: transform 0.25s ease, box-shadow 0.25s ease, z-index 0s 0.25s;
-    background: rgba(255, 255, 255, 0.04);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-}
-.cf-d-poster-portrait  { width: 180px; aspect-ratio: 2 / 3; }
-.cf-d-poster-landscape { width: 280px; aspect-ratio: 16 / 9; }
+/* v3.1.1 — cards use Jellyfin's exact native markup. The active theme's
+   stylesheet handles every visual aspect (card sizing, footer text,
+   hover scaling, overlay reveal, indicator slot positioning). We only
+   add minimal colour tokens for our state-specific indicator badges
+   (which Jellyfin's .indicator class doesn't ship colour variants for). */
 
-@media (max-width: 640px) {
-    .cf-d-poster-portrait  { width: 130px; }
-    .cf-d-poster-landscape { width: 200px; }
-}
+/* Hide the Queue FAB once the item is queued. */
+.cf-d-card-queue-fab[hidden] { display: none; }
 
-.cf-d-card-poster {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(255, 255, 255, 0.06);
-}
-.cf-d-card-poster img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-.cf-d-poster-placeholder {
-    color: rgba(255, 255, 255, 0.35);
-}
-.cf-d-poster-placeholder .material-icons { font-size: 56px; }
-
-/* Hover overlay — gradient + slide-up details */
-.cf-d-card-overlay {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.2s ease;
-}
-.cf-d-card-overlay-grad {
-    position: absolute;
-    inset: 0;
-    /* Stronger uniform darkening across the whole cover plus a heavier
-       gradient at the bottom where the title/details live — keeps text
-       readable against any cover, no matter how bright. */
-    background:
-        linear-gradient(
-            to top,
-            rgba(0, 0, 0, 0.95) 0%,
-            rgba(0, 0, 0, 0.75) 30%,
-            rgba(0, 0, 0, 0.40) 60%,
-            rgba(0, 0, 0, 0.25) 100%
-        );
-}
-.cf-d-card-overlay-body {
-    position: absolute;
-    inset: auto 0 0 0;
-    padding: 12px 12px 14px;
-    color: #fff;
-    transform: translateY(8px);
-    transition: transform 0.2s ease;
-}
-.cf-d-card:hover,
-.cf-d-card:focus-within {
-    transform: translateY(-4px) scale(1.04);
-    z-index: 5;
-    transition: transform 0.25s ease;
-}
-.cf-d-card:hover .cf-d-card-overlay,
-.cf-d-card:focus-within .cf-d-card-overlay {
-    opacity: 1;
-    pointer-events: auto;
-}
-.cf-d-card:hover .cf-d-card-overlay-body,
-.cf-d-card:focus-within .cf-d-card-overlay-body {
-    transform: translateY(0);
-}
-
-.cf-d-card-title    { font-size: 14px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.cf-d-card-subtitle { font-size: 12px; color: rgba(255, 255, 255, 0.78); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cf-d-card-meta     { font-size: 11px; color: rgba(255, 255, 255, 0.6); margin-top: 4px; }
-.cf-d-card-summary  { font-size: 11px; color: rgba(255, 255, 255, 0.7); margin-top: 6px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-
-.cf-d-card-cta {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    margin-top: 8px;
-    padding: 6px 10px;
-    background: #00a4dc;
-    border: none;
-    border-radius: 6px;
-    color: #fff;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.15s ease;
-    font-family: inherit;
-}
-.cf-d-card-cta:hover { background: #0078d4; }
-.cf-d-card-cta .material-icons { font-size: 16px; }
-.cf-d-card-cta-queued { background: rgba(76, 175, 80, 0.85); cursor: default; }
-.cf-d-card-cta-queued:hover { background: rgba(76, 175, 80, 0.85); }
-
-/* v3.0.1 — persistent status indicators on the cover (top-right corner).
-   Visible whether or not the user is hovering — they're status, not action. */
-.cf-d-card-indicators {
-    position: absolute;
-    top: 6px;
-    right: 6px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    z-index: 6;
-    pointer-events: none;
-}
-.cf-d-card-indicators[hidden] { display: none; }
-.cf-d-card-indicator {
-    width: 22px; height: 22px;
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    color: #fff;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
-    background: rgba(0, 0, 0, 0.55);
-}
-.cf-d-card-indicator .material-icons { font-size: 16px; }
+/* State-specific indicator colours. Native .cardIndicators positions the
+   container in the top-right corner; native .indicator gives us the
+   pill shape + base background. We only set the colour-by-state. */
 .cf-d-card-indicator-star {
-    background: rgba(255, 193, 7, 0.95);  /* amber star */
+    background: rgba(255, 193, 7, 0.95);  /* amber */
     color: #fff;
 }
 .cf-d-card-indicator-queued {
-    /* Hollow ring — queued but not yet downloaded. */
-    background: rgba(0, 0, 0, 0.55);
+    background: transparent;
     border: 2px solid rgba(76, 175, 80, 0.95);
     color: rgba(76, 175, 80, 0.95);
 }
 .cf-d-card-indicator-downloaded {
-    background: rgba(76, 175, 80, 0.95);  /* solid green tick */
+    background: rgba(76, 175, 80, 0.95);
     color: #fff;
 }
-
-/* Queue button is gone entirely once queued — no jumping between states. */
-.cf-d-card-cta[hidden] { display: none; }
 
 /* v3.1 — Cypherflix-action labels under the native .detailButton-content
    icon. Native buttons are icon-only with title-tooltips; ours include a
@@ -922,39 +743,8 @@
     display: block;
 }
 
-/* v3.0 — secondary follow link in the Discover hover overlay */
-.cf-d-card-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-top: 8px;
-}
-.cf-d-card-follow {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.32);
-    border-radius: 6px;
-    color: rgba(255, 255, 255, 0.92);
-    font-size: 11px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 0.12s ease, border-color 0.12s ease;
-    font-family: inherit;
-}
-.cf-d-card-follow .material-icons { font-size: 14px; }
-.cf-d-card-follow:hover {
-    background: rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.55);
-}
-.cf-d-card-follow-active {
-    background: rgba(76, 175, 80, 0.18);
-    border-color: rgba(76, 175, 80, 0.55);
-    color: rgba(255, 255, 255, 0.95);
-}
+/* v3.1.1: per-card Follow link removed — Follow lives on the detail
+   page only. Empty placeholder kept for any in-flight callers. */
 
 /* v3.0 — Following tab */
 .cf-following-host {
@@ -1102,18 +892,9 @@
     margin: 0 auto;
 }
 
-/* Touch — tap reveals overlay (no hover on touch). The :focus-within
-   rule above gives us tap activation if the user taps the card; tap
-   again on the CTA fires the request. Tap-away removes focus. */
-@media (hover: none) {
-    .cf-d-card-overlay {
-        opacity: 1;  /* always visible on touch since hover is unreliable */
-    }
-    .cf-d-card-overlay-body { transform: translateY(0); }
-}
-
-/* Skeleton card (matches portrait OR landscape via shared aspect class) */
-.cf-d-card-skeleton .cf-d-card-poster { background: rgba(255, 255, 255, 0.06); }
+/* v3.1.1: hover/touch behaviour now comes from native .card-hoverable +
+   .cardOverlayButton-hover. Skeleton uses the same native chain so it
+   inherits proportions/colours from the active theme; no overrides. */
 
 
 /* Multi-select checkbox + bulk action bar */
