@@ -24,13 +24,25 @@ function ensureModalStyles() {
     if (document.getElementById('cypherflixItemDetailStyles')) return;
     const css = `
     #cypherflixItemDetail-backdrop {
-        position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+        position: fixed; inset: 0;
+        background: linear-gradient(180deg,
+            rgba(20, 24, 38, 0.55) 0%,
+            rgba(15, 17, 28, 0.78) 100%);
+        backdrop-filter: blur(24px) saturate(140%);
+        -webkit-backdrop-filter: blur(24px) saturate(140%);
         z-index: 9001; display: flex; align-items: center; justify-content: center;
         opacity: 0; transition: opacity 0.18s ease;
     }
     #cypherflixItemDetail-backdrop.cf-id-open { opacity: 1; }
     .cf-id-modal {
-        background: #1c1c1e; color: #fff; border-radius: 10px;
+        /* Same glass treatment used by the discover page itself, so the
+           modal feels like a panel of the page rather than a foreign
+           system dialog. */
+        background: rgba(28, 28, 30, 0.7);
+        backdrop-filter: blur(28px) saturate(140%);
+        -webkit-backdrop-filter: blur(28px) saturate(140%);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #fff; border-radius: 12px;
         max-width: 880px; width: calc(100% - 48px); max-height: calc(100vh - 96px);
         overflow: hidden; display: flex; flex-direction: column;
         box-shadow: 0 24px 60px rgba(0,0,0,0.6);
@@ -234,6 +246,23 @@ function renderDetail(modal, detail) {
         });
     }
 
+    // Pre-mark Follow buttons whose target the user already follows.
+    (async () => {
+        try {
+            const cb = '?cb=' + Date.now();
+            const fs = await import('./follow_state.js' + cb);
+            await fs.loadFollowing();
+            modal.querySelectorAll('.cf-id-follow').forEach((btn) => {
+                const target = ft[btn.dataset.target];
+                if (target && fs.isFollowing(target)) {
+                    btn.disabled = true;
+                    btn.classList.add('cf-id-action-active');
+                    btn.innerHTML = '<span class="material-icons">check</span>Following';
+                }
+            });
+        } catch (_) { /* fail-quiet */ }
+    })();
+
     modal.querySelectorAll('.cf-id-follow').forEach((btn) => {
         const targetKey = btn.dataset.target;
         const target = ft[targetKey];
@@ -248,6 +277,9 @@ function renderDetail(modal, detail) {
                 btn.disabled = true;
                 btn.classList.add('cf-id-action-active');
                 btn.innerHTML = '<span class="material-icons">check</span>Following';
+                const cb = '?cb=' + Date.now();
+                const fs = await import('./follow_state.js' + cb);
+                fs.markFollowed(target);
             } catch (err) {
                 showToast(`Couldn't follow: ${err.message || err}`);
             }

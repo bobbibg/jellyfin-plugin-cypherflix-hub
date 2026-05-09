@@ -452,7 +452,10 @@
     gap: 14px;
     overflow-x: auto;
     overflow-y: visible;
-    padding: 4px 24px 16px;
+    /* Match Jellyfin's homeSection content padding (3.3em) so the first
+       and last cards in a row line up with the page-level grid instead of
+       hugging the viewport edge when the user has scrolled to the start. */
+    padding: 4px 3.3em 16px;
     scroll-snap-type: x proximity;
     scroll-behavior: smooth;
     /* Hide the native scrollbar — arrows handle navigation */
@@ -612,6 +615,60 @@
 .cf-d-card-cta-queued { background: rgba(76, 175, 80, 0.85); cursor: default; }
 .cf-d-card-cta-queued:hover { background: rgba(76, 175, 80, 0.85); }
 
+/* v3.0.1 — persistent status indicators on the cover (top-right corner).
+   Visible whether or not the user is hovering — they're status, not action. */
+.cf-d-card-indicators {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 6;
+    pointer-events: none;
+}
+.cf-d-card-indicators[hidden] { display: none; }
+.cf-d-card-indicator {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+    background: rgba(0, 0, 0, 0.55);
+}
+.cf-d-card-indicator .material-icons { font-size: 16px; }
+.cf-d-card-indicator-star {
+    background: rgba(255, 193, 7, 0.95);  /* amber star */
+    color: #fff;
+}
+.cf-d-card-indicator-queued {
+    /* Hollow ring — queued but not yet downloaded. */
+    background: rgba(0, 0, 0, 0.55);
+    border: 2px solid rgba(76, 175, 80, 0.95);
+    color: rgba(76, 175, 80, 0.95);
+}
+.cf-d-card-indicator-downloaded {
+    background: rgba(76, 175, 80, 0.95);  /* solid green tick */
+    color: #fff;
+}
+
+/* Queue button is gone entirely once queued — no jumping between states. */
+.cf-d-card-cta[hidden] { display: none; }
+
+/* Following list — picture avatar (square cover) */
+.cf-fol-avatar {
+    width: 40px; height: 40px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.06);
+    flex-shrink: 0;
+}
+.cf-fol-avatar img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
 /* v3.0 — secondary follow link in the Discover hover overlay */
 .cf-d-card-actions {
     display: flex;
@@ -710,19 +767,51 @@
     display: flex;
     align-items: center;
     gap: 6px;
+    /* Both controls are explicitly the same height. The select picks up
+       its width from content; the unfollow keeps a square ratio. */
 }
 .cf-fol-monitor {
+    height: 36px;
+    box-sizing: border-box;
     background: rgba(255, 255, 255, 0.06);
     color: #fff;
     border: 1px solid rgba(255, 255, 255, 0.18);
     border-radius: 6px;
-    padding: 4px 8px;
+    padding: 0 28px 0 10px;  /* space for the chevron */
     font-size: 12px;
     font-family: inherit;
     cursor: pointer;
+    /* Strip native chrome — option list's native panel is OS-themed and
+       can't be skinned cross-platform. We restyle the option backgrounds
+       below, which both Chromium and Firefox honour. */
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='%23ffffffaa'><path d='M7 10l5 5 5-5z'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 12px 12px;
+    transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+.cf-fol-monitor:hover {
+    background-color: rgba(255, 255, 255, 0.10);
+    border-color: rgba(255, 255, 255, 0.32);
+}
+.cf-fol-monitor:focus {
+    outline: none;
+    border-color: #00a4dc;
+    box-shadow: 0 0 0 2px rgba(0, 164, 220, 0.25);
+}
+/* Option list — Chromium / Firefox honour these on the popup panel. */
+.cf-fol-monitor option {
+    background: #1c1c1e;
+    color: #fff;
+    padding: 8px 12px;
 }
 .cf-fol-unfollow {
-    width: 32px; height: 32px;
+    height: 36px;
+    width: 36px;  /* square — same rhythm as the select's height */
+    box-sizing: border-box;
     background: transparent;
     border: 1px solid rgba(239, 68, 68, 0.32);
     border-radius: 6px;
@@ -732,6 +821,7 @@
     transition: background 0.12s ease;
 }
 .cf-fol-unfollow:hover { background: rgba(239, 68, 68, 0.18); }
+.cf-fol-unfollow .material-icons { font-size: 18px; }
 .cf-fol-empty,
 .cf-fol-error,
 .cf-fol-loading {

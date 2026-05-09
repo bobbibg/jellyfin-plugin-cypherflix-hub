@@ -112,17 +112,35 @@ function renderRow(r, isAdmin, isSelected) {
     const progress = progressFor(r);
     const stuck = r.status === 'failed' || r.status === 'blocked' || (r.status === 'wanted' && r.retries >= 3);
 
+    // v3.0.1: Loosen + Candidates are always available to admins now —
+    // they're escape hatches the user reaches for whenever a queued item
+    // hasn't snatched yet, not just after the auto-grabber has tried and
+    // failed three times. The 'stuck' gate was hiding them from a freshly
+    // queued book that simply hadn't been picked up yet.
     const adminActions = isAdmin ? `
         <div class="cf-q-row-actions">
             <button class="cf-q-iconbtn cf-q-retry"        title="Retry"><span class="material-icons">replay</span></button>
             <button class="cf-q-iconbtn cf-q-refresh-meta" title="Refresh metadata"><span class="material-icons">cloud_sync</span></button>
             <button class="cf-q-iconbtn cf-q-regrab"       title="Re-grab"><span class="material-icons">file_download</span></button>
-            ${stuck ? '<button class="cf-q-iconbtn cf-q-loosen"     title="Loosen search (broader matcher)"><span class="material-icons">tune</span></button>' : ''}
-            ${stuck ? '<button class="cf-q-iconbtn cf-q-candidates" title="Show indexer candidates"><span class="material-icons">manage_search</span></button>' : ''}
+            <button class="cf-q-iconbtn cf-q-loosen"       title="Loosen search (broader matcher)"><span class="material-icons">tune</span></button>
+            <button class="cf-q-iconbtn cf-q-candidates"   title="Show indexer candidates"><span class="material-icons">manage_search</span></button>
             ${stuck ? '<button class="cf-q-iconbtn cf-q-remove cf-q-iconbtn-danger" title="Remove from queue"><span class="material-icons">delete_outline</span></button>' : ''}
         </div>` : '';
 
     const checkClass = isSelected ? ' cf-q-row-selected' : '';
+    // v3.0.1: only render the progress bar for the in-flight statuses where
+    // a partial bar carries information. Static states (wanted, failed,
+    // done, blocked, etc.) just looked like a weird border.
+    const showProgress = (
+        r.status === 'downloading' ||
+        r.status === 'snatched' ||
+        r.status === 'importing' ||
+        r.status === 'tagging'
+    );
+    const progressBar = showProgress ? `
+            <div class="cf-q-row-progress">
+                <div class="cf-q-row-progress-fill cf-q-row-progress-${r.status}" style="width: ${progress}%"></div>
+            </div>` : '';
     return `
         <div class="cf-q-row cf-q-row-status-${r.status}${checkClass}" data-id="${r.id}">
             <label class="cf-q-row-checkbox" title="Select"><input type="checkbox" class="cf-q-row-check" data-id="${r.id}"${isSelected ? ' checked' : ''} /></label>
@@ -135,9 +153,7 @@ function renderRow(r, isAdmin, isSelected) {
             </div>
             <div class="cf-q-row-status">${statusPill(r.status)}</div>
             ${adminActions}
-            <div class="cf-q-row-progress">
-                <div class="cf-q-row-progress-fill cf-q-row-progress-${r.status}" style="width: ${progress}%"></div>
-            </div>
+            ${progressBar}
         </div>`;
 }
 
