@@ -25,8 +25,11 @@
 
     const STYLE_URL = '/CypherflixHub/Web/styles.css';
     const ANCHORS = {
-        discover: { selector: '.sections.cypherflix-discover', module: '/CypherflixHub/Web/pages/discover.js' },
-        manage:   { selector: '.sections.cypherflix-manage',   module: '/CypherflixHub/Web/pages/manage.js'   },
+        discover:  { selector: '.sections.cypherflix-discover',  module: '/CypherflixHub/Web/pages/discover.js'  },
+        manage:    { selector: '.sections.cypherflix-manage',    module: '/CypherflixHub/Web/pages/manage.js'    },
+        // v3.0: Following tab — admin adds via Custom Tabs with body
+        //   <div class="sections cypherflix-following"></div>
+        following: { selector: '.sections.cypherflix-following', module: '/CypherflixHub/Web/pages/following.js' },
     };
 
     function ensureStyles() {
@@ -87,7 +90,7 @@
         // Skip if our containers already exist as DIRECT children of the
         // live libraryPage. Otherwise check anew (allows recovery if user
         // reconfigures Custom Tabs mid-session).
-        const haveOurs = !!liveLib.querySelector(':scope > .sections.cypherflix-discover, :scope > .sections.cypherflix-manage');
+        const haveOurs = !!liveLib.querySelector(':scope > .sections.cypherflix-discover, :scope > .sections.cypherflix-manage, :scope > .sections.cypherflix-following');
         const client = window.ApiClient;
         if (!client || typeof client.accessToken !== 'function') return;
         const tok = client.accessToken();
@@ -132,7 +135,7 @@
             // Rename done; skip backfill if our containers are already mounted.
             if (haveOurs) return;
 
-            const ourSigs = ['cypherflix-discover', 'cypherflix-manage'];
+            const ourSigs = ['cypherflix-discover', 'cypherflix-manage', 'cypherflix-following'];
             for (let i = 0; i < cfg.Tabs.length; i++) {
                 const t = cfg.Tabs[i] || {};
                 const html = t.ContentHtml || '';

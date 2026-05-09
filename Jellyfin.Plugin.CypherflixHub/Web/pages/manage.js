@@ -117,6 +117,8 @@ function renderRow(r, isAdmin, isSelected) {
             <button class="cf-q-iconbtn cf-q-retry"        title="Retry"><span class="material-icons">replay</span></button>
             <button class="cf-q-iconbtn cf-q-refresh-meta" title="Refresh metadata"><span class="material-icons">cloud_sync</span></button>
             <button class="cf-q-iconbtn cf-q-regrab"       title="Re-grab"><span class="material-icons">file_download</span></button>
+            ${stuck ? '<button class="cf-q-iconbtn cf-q-loosen"     title="Loosen search (broader matcher)"><span class="material-icons">tune</span></button>' : ''}
+            ${stuck ? '<button class="cf-q-iconbtn cf-q-candidates" title="Show indexer candidates"><span class="material-icons">manage_search</span></button>' : ''}
             ${stuck ? '<button class="cf-q-iconbtn cf-q-remove cf-q-iconbtn-danger" title="Remove from queue"><span class="material-icons">delete_outline</span></button>' : ''}
         </div>` : '';
 
@@ -486,9 +488,23 @@ export async function render(root) {
                     await api.regrabRequest(id);
                     msg.textContent = 'Re-grab kicked off.';
                 } else if (btn.classList.contains('cf-q-remove')) {
-                    if (!confirm('Remove this from the queue? The watchlist entry stays — you can add it again from Discover.')) return;
+                    if (!confirm('Remove this from the queue? The author/series follow stays — you can add it again from Discover.')) return;
                     await api.deleteRequest(id);
                     msg.textContent = 'Removed from queue.';
+                } else if (btn.classList.contains('cf-q-loosen')) {
+                    // v3.0 search-recovery — Loosen sets the user_loosened_at
+                    // flag on the request and opens the Candidates modal.
+                    const cb = '?cb=' + Date.now();
+                    const { open: openCandidates } = await import('./candidates_modal.js' + cb);
+                    const requestRow = allItems.find((r) => r.id === id) || null;
+                    await openCandidates({ requestId: id, requestRow, strictness: 'loose' });
+                    return;  // modal handles UI, skip refresh
+                } else if (btn.classList.contains('cf-q-candidates')) {
+                    const cb = '?cb=' + Date.now();
+                    const { open: openCandidates } = await import('./candidates_modal.js' + cb);
+                    const requestRow = allItems.find((r) => r.id === id) || null;
+                    await openCandidates({ requestId: id, requestRow, strictness: 'raw' });
+                    return;
                 }
                 // Preserve current page after a row-level action
                 await refresh({ keepPage: true });

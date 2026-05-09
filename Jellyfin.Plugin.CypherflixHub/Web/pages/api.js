@@ -75,11 +75,25 @@ async function http(method, path, body) {
 
 export const api = {
     health:           ()                              => http('GET',  '/health'),
-    listWatchlist:    (kind)                          => http('GET',  '/watchlist' + (kind ? '?kind=' + encodeURIComponent(kind) : '')),
-    getWatchlist:     (id)                            => http('GET',  '/watchlist/' + id),
-    createWatchlist:  (body)                          => http('POST', '/watchlist', body),
-    patchWatchlist:   (id, body)                      => http('PATCH', '/watchlist/' + id, body),
-    deleteWatchlist:  (id)                            => http('DELETE', '/watchlist/' + id),
+
+    // v3.0: /watchlist was renamed /following. The old methods are kept as
+    // thin shims so any in-flight code that hasn't been updated keeps
+    // working — they hit the new endpoint.
+    listFollowing:    (kind)                          => http('GET',  '/following' + (kind ? '?kind=' + encodeURIComponent(kind) : '')),
+    getFollowing:     (id)                            => http('GET',  '/following/' + id),
+    createFollowing:  (body)                          => http('POST', '/following', body),
+    patchFollowing:   (id, body)                      => http('PATCH', '/following/' + id, body),
+    deleteFollowing:  (id)                            => http('DELETE', '/following/' + id),
+
+    // Legacy aliases — remove after one release cycle.
+    listWatchlist:    (kind)                          => http('GET',  '/following' + (kind ? '?kind=' + encodeURIComponent(kind) : '')),
+    getWatchlist:     (id)                            => http('GET',  '/following/' + id),
+    createWatchlist:  (body)                          => http('POST', '/following', body),
+    patchWatchlist:   (id, body)                      => http('PATCH', '/following/' + id, body),
+    deleteWatchlist:  (id)                            => http('DELETE', '/following/' + id),
+
+    // v3.0: per-item Queue endpoint. Body shape mirrors discover_item.queue_payload.
+    queueAdd:         (body)                          => http('POST', '/queue/add', body),
 
     listRequests: (params = {}) => {
         const q = new URLSearchParams();
@@ -125,4 +139,18 @@ export const api = {
         if (limit) params.set('limit', String(limit));
         return http('GET', '/discover/search?' + params.toString());
     },
+    // v3.0: full-record fetch for the Item Detail page. `kind` is one of
+    // 'book' | 'comic_issue' | 'comic_series'.
+    discoverItem:        (kind, sourceId) =>
+        http('GET', '/discover/item/' + encodeURIComponent(kind) + '/' + encodeURIComponent(sourceId)),
+
+    // v3.0 search-recovery — Phase 1 endpoints.
+    requestCandidates:   (id, strictness) => {
+        const q = new URLSearchParams();
+        if (strictness) q.set('strictness', strictness);
+        const qs = q.toString();
+        return http('GET', '/requests/' + id + '/candidates' + (qs ? '?' + qs : ''));
+    },
+    requestGrab:         (id, body)       => http('POST', '/requests/' + id + '/grab', body),
+    requestLoosen:       (id)             => http('POST', '/requests/' + id + '/loosen', {}),
 };

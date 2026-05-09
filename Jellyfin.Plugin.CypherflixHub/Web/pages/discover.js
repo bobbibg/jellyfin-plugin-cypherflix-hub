@@ -116,10 +116,25 @@ function renderCard(item) {
         ? '<img src="' + escapeHtml(item.cover_url) + '" alt="" loading="lazy" />'
         : '<div class="cf-d-poster-placeholder"><span class="material-icons">' + kindIcon(item.kind) + '</span></div>';
 
+    // v3.0: secondary "+ Follow" link in the hover overlay. The discover-item
+    // shape carries a watchlist_payload that names the relevant author or
+    // series; the link copy reflects that target. Falls back to no link when
+    // the item doesn't expose a follow target.
+    const wp = item.watchlist_payload;
+    const followLabel = wp && wp.display_name
+        ? (wp.kind === 'book_author' ? 'Follow ' + wp.display_name :
+           wp.kind === 'book_series' ? 'Follow series' :
+           wp.kind === 'comic_series' ? 'Follow ' + wp.display_name : 'Follow')
+        : null;
+    const followLink = followLabel
+        ? '<button type="button" class="cf-d-card-follow"><span class="material-icons">add</span><span>' + escapeHtml(followLabel) + '</span></button>'
+        : '';
+
     return `
         <div class="cf-d-card ${aspectClassFor(item.kind)}"
              data-source="${escapeHtml(item.source || '')}"
              data-source-id="${escapeHtml(item.source_id || '')}"
+             data-kind="${escapeHtml(item.kind || '')}"
              tabindex="0">
             <div class="cf-d-card-poster">${poster}</div>
             <div class="cf-d-card-overlay">
@@ -129,10 +144,13 @@ function renderCard(item) {
                     ${subtitle ? '<div class="cf-d-card-subtitle">' + escapeHtml(subtitle) + '</div>' : ''}
                     ${meta.length ? '<div class="cf-d-card-meta">' + meta.join(' · ') + '</div>' : ''}
                     ${summary ? '<div class="cf-d-card-summary">' + summary + '</div>' : ''}
-                    <button class="cf-d-card-cta">
-                        <span class="material-icons">add</span>
-                        <span>Add to Queue</span>
-                    </button>
+                    <div class="cf-d-card-actions">
+                        <button class="cf-d-card-cta">
+                            <span class="material-icons">add</span>
+                            <span>Queue</span>
+                        </button>
+                        ${followLink}
+                    </div>
                 </div>
             </div>
         </div>`;
@@ -214,37 +232,87 @@ async function loadCategoryRow(rowEl, cat, msg) {
 }
 
 // --- Add-to-Queue ---------------------------------------------------------
+//
+// v3.0: Queue is now strictly per-item — clicking the button creates a
+// `requests` row for that specific book / comic issue and fires the
+// searcher on it immediately. The author/series follow concept is
+// available as a separate hover-overlay link and from the Item Detail
+// page.
+
+function _buildQueuePayload(item) {
+    // Prefer the server-supplied queue_payload when present (Item Detail
+    // endpoint provides it). Discover trending/search items don't yet, so
+    // fall back to deriving from the discover-item shape.
+    if (item.queue_payload) return item.queue_payload;
+
+    if (item.kind === 'book' && item.source === 'hardcover') {
+        return {
+            kind: 'book',
+            series_name: item.series_name || item.title,
+            title: item.title,
+            hardcover_book_id: parseInt(item.source_id, 10),
+            series_year: item.year || undefined,
+            authors: item.authors || undefined,
+            release_date: item.release_date || undefined,
+        };
+    }
+    if (item.kind === 'comic_issue' && item.source === 'comicvine') {
+        return {
+            kind: 'comic_issue',
+            series_name: item.series_name || item.title,
+            title: item.title,
+            comicvine_issue_id: parseInt(item.source_id, 10),
+            issue_number: item.issue_number || undefined,
+            series_year: item.year || undefined,
+            release_date: item.release_date || undefined,
+        };
+    }
+    return null;
+}
 
 async function handleAddToQueue(card, msg) {
     let item;
     try { item = JSON.parse(card.dataset.payload || '{}'); }
     catch (_) { item = {}; }
-    if (!item.watchlist_payload) {
-        showToast('No watchlist payload on this item.');
+
+    const title = item.title || (item.watchlist_payload && item.watchlist_payload.display_name) || 'item';
+    const body  = _buildQueuePayload(item);
+    if (!body) {
+        showToast(`Can't queue ${title} — missing identifier.`);
         return;
     }
-    const title = item.title || item.watchlist_payload.display_name || 'item';
-    const body = { kind: item.watchlist_kind, ...item.watchlist_payload };
     const btn = card.querySelector('.cf-d-card-cta');
     try {
-        const res = await api.createWatchlist(body);
+        const res = await api.queueAdd(body);
         const existed = res && res.existed === true;
-        showToast(existed ? `Already in your queue: ${title}` : `Added to queue: ${title}`);
+        showToast(existed ? `Already in your queue: ${title}` : `Queued: ${title}`);
         markQueued(btn, existed ? 'In queue' : 'Queued');
-        // Clear inline status (toast replaces it).
         if (msg) msg.textContent = '';
     } catch (err) {
-        // Legacy 409 path — pre-v2.2.0 backend used to surface duplicates as
-        // 409. v2.2.0+ returns 201/200 with existed:true, handled above.
         const m = String(err && err.message || err);
-        if (m.includes('409') || /already|duplicate|exists/i.test(m)) {
-            showToast(`Already in your queue: ${title}`);
-            markQueued(btn, 'In queue');
-            if (msg) msg.textContent = '';
-        } else {
-            showToast(`Couldn't add ${title}: ${m}`);
-            if (msg) msg.textContent = '';
+        showToast(`Couldn't queue ${title}: ${m}`);
+        if (msg) msg.textContent = '';
+    }
+}
+
+async function handleFollow(card, target) {
+    // target is one of the watchlist_payloads exposed by the discover item
+    // (legacy single-target) or by the Item Detail endpoint (named targets).
+    if (!target) return;
+    const name = target.display_name || 'this';
+    try {
+        const res = await api.createFollowing(target);
+        const existed = res && res.existed === true;
+        showToast(existed ? `Already following: ${name}` : `Following: ${name}`);
+        // Mark the follow link visually if it lives on the card.
+        const link = card && card.querySelector('.cf-d-card-follow');
+        if (link) {
+            link.textContent = existed ? 'Following' : 'Following ✓';
+            link.classList.add('cf-d-card-follow-active');
         }
+    } catch (err) {
+        const m = String(err && err.message || err);
+        showToast(`Couldn't follow ${name}: ${m}`);
     }
 }
 
@@ -348,12 +416,37 @@ export async function render(root) {
     });
     searchKind.addEventListener('change', () => { lastQuery = ''; triggerSearch(); });
 
-    // Add-to-Queue delegated click handler — works for both category rows
-    // and search-results grid since they share the .cf-d-card class.
+    // v3.0: delegated click handler covers Queue button, Follow link, and
+    // click-to-detail-page (clicking the card body anywhere away from the
+    // action buttons opens the Item Detail modal). All three live on the
+    // .cf-d-card surface so one listener handles the lot.
     root.addEventListener('click', async (e) => {
-        const btn = e.target.closest('.cf-d-card-cta');
-        if (!btn) return;
-        const card = btn.closest('.cf-d-card[data-source-id]');
-        if (card) await handleAddToQueue(card, msg);
+        const queueBtn = e.target.closest('.cf-d-card-cta');
+        if (queueBtn) {
+            const card = queueBtn.closest('.cf-d-card[data-source-id]');
+            if (card) await handleAddToQueue(card, msg);
+            e.stopPropagation();
+            return;
+        }
+        const followBtn = e.target.closest('.cf-d-card-follow');
+        if (followBtn) {
+            const card = followBtn.closest('.cf-d-card[data-source-id]');
+            if (!card) return;
+            try {
+                const item = JSON.parse(card.dataset.payload || '{}');
+                await handleFollow(card, item.watchlist_payload);
+            } catch (_) { /* ignore */ }
+            e.stopPropagation();
+            return;
+        }
+        const card = e.target.closest('.cf-d-card[data-source-id]');
+        if (card) {
+            // Click on card body (away from action buttons) → open detail page.
+            const detailUrl = './item_detail.js?cb=' + Date.now();
+            const { itemDetail } = await import(detailUrl);
+            const kind = card.dataset.kind;
+            const sourceId = card.dataset.sourceId;
+            if (kind && sourceId) await itemDetail.open({ kind, sourceId });
+        }
     });
 }
