@@ -144,34 +144,28 @@ function renderCard(item) {
         ? ` style="background-image:url('${escapeHtml(item.cover_url)}')"`
         : '';
 
-    // Indicators wrap in native's .cardIndicators slot (top-right corner of
-    // the cover) — Jellyfin already positions this for us. Inner .indicator
-    // class gives us the rounded-pill look; per-state colour comes from a
-    // small custom modifier.
-    const indicators = `
-        <div class="cardIndicators cf-d-card-indicators" hidden>
-            <div class="indicator cf-d-card-indicator-star" title="Following" hidden>
-                <span class="material-icons star" aria-hidden="true"></span>
-            </div>
-            <div class="indicator cf-d-card-indicator-queued" title="Queued" hidden>
-                <span class="material-icons check" aria-hidden="true"></span>
-            </div>
-            <div class="indicator cf-d-card-indicator-downloaded" title="Downloaded" hidden>
-                <span class="material-icons check" aria-hidden="true"></span>
-            </div>
-        </div>`;
+    // Indicators slot — empty at first paint. _refreshCardState injects only
+    // the indicators that apply (matches native's "render only what's true"
+    // pattern; the previous `hidden` attribute approach didn't work because
+    // .cardIndicators / .indicator have native styles that override the
+    // `hidden` attribute's display:none).
+    const indicators = '<div class="cardIndicators cf-d-card-indicators"></div>';
 
     // Native hover overlay — same shape as the home page's hover-reveal
-    // (paper-icon-button-light, .cardOverlayButton-hover, sitting in the
-    // .cardOverlayButton-br.flex bottom-row cluster). Just our `add` icon
-    // instead of native's `play_arrow`.
+    // (paper-icon-button-light, .cardOverlayButton-hover, in the
+    // .cardOverlayButton-br.flex bottom-row cluster). Material-icon glyph
+    // is set as TEXT CONTENT, not as a class — the standard material-icons
+    // font is a ligature font, so the text "add" renders as the + glyph.
+    // (Native uses class-based icons because Jellyfin ships its own icon
+    // codepoints under names like .play_arrow; ligature is the
+    // theme-portable choice.)
     const queueFab = `
         <div class="cardOverlayContainer itemAction">
             <div class="cardOverlayButton-br flex">
                 <button is="paper-icon-button-light" type="button"
                         class="cardOverlayButton cardOverlayButton-hover paper-icon-button-light cf-d-card-queue-fab"
                         title="Queue this">
-                    <span class="material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover add" aria-hidden="true"></span>
+                    <span class="material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover" aria-hidden="true">add</span>
                 </button>
             </div>
         </div>`;
@@ -195,39 +189,50 @@ function renderCard(item) {
                     ${queueFab}
                 </div>
                 <div class="cardFooter">
-                    <div class="cardText cardText-first" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
-                    ${secondary ? '<div class="cardText cardText-secondary">' + escapeHtml(secondary) + '</div>' : ''}
+                    <div class="cardText cardTextCentered cardText-first" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
+                    ${secondary ? '<div class="cardText cardTextCentered cardText-secondary">' + escapeHtml(secondary) + '</div>' : ''}
                 </div>
             </div>
         </div>`;
 }
 
 /** Apply current follow_state to a card's persistent indicators + Queue
- *  FAB visibility. v3.1.1 dropped the per-card Follow link entirely; the
- *  Follow action lives on the detail page only. */
+ *  FAB visibility. We dynamically build the .cardIndicators contents —
+ *  the previous "render all then hide" approach didn't survive contact
+ *  with Jellyfin's CSS, which forces `.cardIndicators` and `.indicator`
+ *  to display: flex regardless of the `hidden` attribute. */
 function _refreshCardState(card, fs) {
     let item = null;
     try { item = JSON.parse(card.dataset.payload || '{}'); } catch (_) {}
     if (!item) return;
 
-    const indContainer  = card.querySelector('.cf-d-card-indicators');
-    const star          = card.querySelector('.cf-d-card-indicator-star');
-    const queuedDot     = card.querySelector('.cf-d-card-indicator-queued');
-    const downloadedDot = card.querySelector('.cf-d-card-indicator-downloaded');
-    const queueFab      = card.querySelector('.cf-d-card-queue-fab');
+    const indContainer = card.querySelector('.cf-d-card-indicators');
+    const queueFab     = card.querySelector('.cf-d-card-queue-fab');
 
     const isFollowed = fs.isFollowing(item.watchlist_payload);
-    const queueState = fs.getQueueState(item);
+    const queueState = fs.getQueueState(item);  // 'none' | 'queued' | 'downloaded'
 
-    if (star) star.hidden = !isFollowed;
-    if (queuedDot) queuedDot.hidden = queueState !== 'queued';
-    if (downloadedDot) downloadedDot.hidden = queueState !== 'downloaded';
+    // Render only the indicators that apply. Empty container collapses
+    // visually because native .cardIndicators has no min-size.
     if (indContainer) {
-        indContainer.hidden = !(isFollowed || queueState !== 'none');
+        const parts = [];
+        if (isFollowed) {
+            parts.push('<div class="indicator cf-d-card-indicator-star" title="Following">'
+                + '<span class="material-icons" aria-hidden="true">star</span></div>');
+        }
+        if (queueState === 'queued') {
+            parts.push('<div class="indicator cf-d-card-indicator-queued" title="Queued">'
+                + '<span class="material-icons" aria-hidden="true">check</span></div>');
+        } else if (queueState === 'downloaded') {
+            parts.push('<div class="indicator cf-d-card-indicator-downloaded" title="Downloaded">'
+                + '<span class="material-icons" aria-hidden="true">check</span></div>');
+        }
+        indContainer.innerHTML = parts.join('');
     }
 
-    // Queue FAB hides once queued — native pattern: the resume FAB
-    // disappears once the item is fully played. Same idea here.
+    // Queue FAB hides once queued — toggle via the `hidden` attribute, then
+    // also force display:none via our cf-d-card-queue-fab[hidden] CSS rule
+    // for safety against theme overrides.
     if (queueFab) queueFab.hidden = (queueState !== 'none');
 }
 
