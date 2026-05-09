@@ -220,52 +220,39 @@ function skeletonCard(aspectClass) {
         </div>`;
 }
 
+// v3.1 — recon-matched native carousel structure. Recon against jellyfin-web's
+// itemDetails template confirmed the exact pattern:
+//   <div class="verticalSection detailVerticalSection ...">
+//     <h2 class="sectionTitle sectionTitle-cards padded-right">TITLE</h2>
+//     <div is="emby-scroller" class="padded-top-focusscale padded-bottom-focusscale no-padding" data-centerfocus="true">
+//       <div is="emby-itemscontainer" class="scrollSlider focuscontainer-x itemsContainer">
+//         <!-- cards -->
+//       </div>
+//     </div>
+//   </div>
 function renderCategoryRow(cat) {
     return `
-        <section class="cf-d-row" data-row-id="${escapeHtml(cat.id)}">
-            <header class="cf-d-row-header">
-                <h2 class="cf-d-row-title">${escapeHtml(cat.title)}</h2>
+        <div class="verticalSection detailVerticalSection cf-d-row" data-row-id="${escapeHtml(cat.id)}">
+            <h2 class="sectionTitle sectionTitle-cards padded-left padded-right">
+                <span class="cf-d-row-title">${escapeHtml(cat.title)}</span>
                 <span class="cf-d-row-status"></span>
-            </header>
-            <div class="cf-d-row-viewport">
-                <button type="button" class="cf-d-row-arrow cf-d-row-arrow-left disabled" aria-label="Scroll left">
-                    <span class="material-icons">chevron_left</span>
-                </button>
-                <div class="cf-d-row-scroller">
+            </h2>
+            <div is="emby-scroller" class="padded-top-focusscale padded-bottom-focusscale no-padding" data-centerfocus="true">
+                <div is="emby-itemscontainer" class="scrollSlider focuscontainer-x itemsContainer">
                     ${Array(8).fill(skeletonCard('cf-d-poster-portrait')).join('')}
                 </div>
-                <button type="button" class="cf-d-row-arrow cf-d-row-arrow-right" aria-label="Scroll right">
-                    <span class="material-icons">chevron_right</span>
-                </button>
             </div>
-        </section>`;
+        </div>`;
 }
 
-function updateRowArrows(rowEl) {
-    const scroller = rowEl.querySelector('.cf-d-row-scroller');
-    const left  = rowEl.querySelector('.cf-d-row-arrow-left');
-    const right = rowEl.querySelector('.cf-d-row-arrow-right');
-    if (!scroller || !left || !right) return;
-    const atStart = scroller.scrollLeft <= 4;
-    const atEnd   = scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 4;
-    left.classList.toggle('disabled', atStart);
-    right.classList.toggle('disabled', atEnd);
-}
-
-function attachRowArrows(rowEl) {
-    const scroller = rowEl.querySelector('.cf-d-row-scroller');
-    const left  = rowEl.querySelector('.cf-d-row-arrow-left');
-    const right = rowEl.querySelector('.cf-d-row-arrow-right');
-    if (!scroller || !left || !right) return;
-    const step = () => Math.max(scroller.clientWidth * 0.85, 200);
-    left .addEventListener('click', () => scroller.scrollBy({ left: -step(), behavior: 'smooth' }));
-    right.addEventListener('click', () => scroller.scrollBy({ left:  step(), behavior: 'smooth' }));
-    scroller.addEventListener('scroll', () => updateRowArrows(rowEl), { passive: true });
-    requestAnimationFrame(() => updateRowArrows(rowEl));
-}
+// v3.1: scroll/arrow behaviour now comes from Jellyfin's native
+// emby-scroller / emby-itemscontainer web components. No custom JS needed —
+// these are no-op shims kept so older callers don't crash.
+function updateRowArrows(_rowEl) { /* native emby-scroller handles this */ }
+function attachRowArrows(_rowEl) { /* native emby-scroller handles this */ }
 
 async function loadCategoryRow(rowEl, cat, msg) {
-    const scroller = rowEl.querySelector('.cf-d-row-scroller');
+    const scroller = rowEl.querySelector('.itemsContainer');
     const status = rowEl.querySelector('.cf-d-row-status');
     try {
         const data = await cat.loader();
@@ -547,12 +534,16 @@ export async function render(root) {
         }
         const card = e.target.closest('.cf-d-card[data-source-id]');
         if (card) {
-            // Click on card body (away from action buttons) → open detail page.
-            const detailUrl = './item_detail.js?cb=' + Date.now();
-            const { itemDetail } = await import(detailUrl);
+            // v3.1: navigate to the standalone detail route. The bootstrap
+            // hashchange hook mounts the page into the active .libraryPage
+            // and Jellyfin's back button restores the previous tab+scroll.
             const kind = card.dataset.kind;
             const sourceId = card.dataset.sourceId;
-            if (kind && sourceId) await itemDetail.open({ kind, sourceId });
+            if (kind && sourceId) {
+                window.location.hash =
+                    '#/cypherflix/details?kind=' + encodeURIComponent(kind) +
+                    '&source_id=' + encodeURIComponent(sourceId);
+            }
         }
     });
 }

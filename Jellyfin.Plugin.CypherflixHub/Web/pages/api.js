@@ -144,6 +144,10 @@ export const api = {
     discoverItem:        (kind, sourceId) =>
         http('GET', '/discover/item/' + encodeURIComponent(kind) + '/' + encodeURIComponent(sourceId)),
 
+    // v3.1: author bibliography for the More-by-author section.
+    discoverAuthorBibliography: (hardcoverAuthorId) =>
+        http('GET', '/discover/author/' + encodeURIComponent(hardcoverAuthorId) + '/bibliography'),
+
     // v3.0 search-recovery — Phase 1 endpoints.
     requestCandidates:   (id, strictness) => {
         const q = new URLSearchParams();

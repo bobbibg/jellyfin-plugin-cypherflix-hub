@@ -32,6 +32,14 @@
         following: { selector: '.sections.cypherflix-following', module: '/CypherflixHub/Web/pages/following.js' },
     };
 
+    // v3.1: standalone hash route for the Discover detail page. Doesn't
+    // require Custom Tabs config — the user reaches it by clicking a card.
+    // We mount a host directly under the active .libraryPage so Jellyfin's
+    // detail-page CSS treats it as a sibling of the home tabs.
+    const DETAIL_ROUTE_RE = /#\/cypherflix\/details\?/;
+    const DETAIL_HOST_ID = 'cypherflixDetailHost';
+    const DETAIL_MODULE = '/CypherflixHub/Web/pages/discover_detail.js';
+
     function ensureStyles() {
         if (document.querySelector('link[data-cypherflix]')) return;
         const link = document.createElement('link');
@@ -182,15 +190,79 @@
         if (btn) btn.classList.add('emby-tab-button-active');
     }
 
+    // v3.1: detect the discover-detail hash route, mount a host into the
+    // active .libraryPage if not already there, and render the detail page
+    // module into it. We hide all sibling .tabContent panes so the detail
+    // page takes over the viewport like a real Jellyfin item-detail-page.
+    async function tryRenderDetailRoute() {
+        const hash = window.location.hash || '';
+        const onRoute = DETAIL_ROUTE_RE.test(hash);
+        const liveLib = document.querySelector('.libraryPage:not(.hide)');
+        if (!liveLib) return;
+        const existing = document.getElementById(DETAIL_HOST_ID);
+        if (!onRoute) {
+            // Off-route — restore tab visibility and remove host.
+            if (existing) {
+                existing.remove();
+                liveLib.querySelectorAll(':scope > .tabContent').forEach((p) =>
+                    p.classList.remove('cf-d-detail-route-hidden'));
+            }
+            return;
+        }
+        // On-route — hide tabContents and mount the host.
+        liveLib.querySelectorAll(':scope > .tabContent').forEach((p) =>
+            p.classList.add('cf-d-detail-route-hidden'));
+        let host = existing;
+        if (!host) {
+            host = document.createElement('div');
+            host.id = DETAIL_HOST_ID;
+            host.className = 'cf-d-detail-route-host';
+            liveLib.appendChild(host);
+        }
+        // Always re-render on hashchange — we live and die by the hash query.
+        if (host.dataset.cfHash !== hash) {
+            host.dataset.cfHash = hash;
+            host.innerHTML = '';
+            try {
+                const mod = await loadModule(DETAIL_MODULE);
+                await mod.render(host);
+            } catch (err) {
+                host.innerHTML =
+                    '<div class="movie-history-empty-message">' +
+                    '  <div class="empty-message-icon"><span class="material-icons">error_outline</span></div>' +
+                    '  <h3 class="empty-message-title">Detail page failed to load</h3>' +
+                    '  <p class="empty-message-subtitle">' + String(err && err.message || err) + '</p>' +
+                    '</div>';
+            }
+        }
+    }
+
     function tryRenderAll() {
         ensureStyles();
         // Best-effort backfill any missing customTab_<N> containers.
         void ensureCustomTabContainers();
         // Activate our tab if the URL says so but Jellyfin didn't.
         syncActiveCustomTab();
+        // Discover detail route is independent of the tab anchors.
+        void tryRenderDetailRoute();
         for (const key of Object.keys(ANCHORS)) {
             const host = document.querySelector(ANCHORS[key].selector + ':not([data-cf-rendered="1"])');
             if (host) void renderInto(host, key);
+        }
+    }
+
+    // v3.1: load the Jellyfin-page DOM injector once at boot so it begins
+    // observing for native detail pages, missing-item cards, etc., even when
+    // the user never opens our Discover/Queue/Following tabs.
+    async function bootInjections() {
+        try {
+            const cb = '?cb=' + Date.now();
+            const mod = await import('/CypherflixHub/Web/inject.js' + cb);
+            if (mod && typeof mod.bootJellyfinInjections === 'function') {
+                mod.bootJellyfinInjections();
+            }
+        } catch (err) {
+            console.warn('cypherflix-hub: injection bootstrap failed', err);
         }
     }
 
@@ -215,6 +287,8 @@
         }).observe(document.body || document.documentElement, { childList: true, subtree: true });
 
         tryRenderAll();
+        // Native-page injections boot once — they run their own MO.
+        void bootInjections();
     }
 
     if (document.readyState === 'loading') {
