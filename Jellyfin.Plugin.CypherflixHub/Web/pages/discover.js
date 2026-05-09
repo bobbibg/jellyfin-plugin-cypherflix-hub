@@ -116,6 +116,24 @@ function renderCard(item) {
         ? '<img src="' + escapeHtml(item.cover_url) + '" alt="" loading="lazy" />'
         : '<div class="cf-d-poster-placeholder"><span class="material-icons">' + kindIcon(item.kind) + '</span></div>';
 
+    // v3.0.1 — persistent indicators slot. Always present in the DOM so the
+    // event-driven re-render just toggles `hidden` rather than rebuilding
+    // the card. State is applied by _refreshCardState after follow_state
+    // resolves; first paint shows nothing if state hasn't loaded yet, then
+    // upgrades on the next event tick.
+    const indicators = `
+        <div class="cf-d-card-indicators" hidden>
+            <div class="cf-d-card-indicator cf-d-card-indicator-star" title="Following" hidden>
+                <span class="material-icons">star</span>
+            </div>
+            <div class="cf-d-card-indicator cf-d-card-indicator-queued" title="Queued" hidden>
+                <span class="material-icons">check</span>
+            </div>
+            <div class="cf-d-card-indicator cf-d-card-indicator-downloaded" title="Downloaded" hidden>
+                <span class="material-icons">check</span>
+            </div>
+        </div>`;
+
     // v3.0: secondary "+ Follow" link in the hover overlay. The discover-item
     // shape carries a watchlist_payload that names the relevant author or
     // series; the link copy reflects that target. Falls back to no link when
@@ -136,7 +154,7 @@ function renderCard(item) {
              data-source-id="${escapeHtml(item.source_id || '')}"
              data-kind="${escapeHtml(item.kind || '')}"
              tabindex="0">
-            <div class="cf-d-card-poster">${poster}</div>
+            <div class="cf-d-card-poster">${poster}${indicators}</div>
             <div class="cf-d-card-overlay">
                 <div class="cf-d-card-overlay-grad"></div>
                 <div class="cf-d-card-overlay-body">
@@ -154,6 +172,45 @@ function renderCard(item) {
                 </div>
             </div>
         </div>`;
+}
+
+/** Apply current follow_state to a card's indicators + Queue button visibility. */
+function _refreshCardState(card, fs) {
+    let item = null;
+    try { item = JSON.parse(card.dataset.payload || '{}'); } catch (_) {}
+    if (!item) return;
+
+    const indContainer = card.querySelector('.cf-d-card-indicators');
+    const star = card.querySelector('.cf-d-card-indicator-star');
+    const queuedDot = card.querySelector('.cf-d-card-indicator-queued');
+    const downloadedDot = card.querySelector('.cf-d-card-indicator-downloaded');
+    const queueBtn = card.querySelector('.cf-d-card-cta');
+    const followLink = card.querySelector('.cf-d-card-follow');
+
+    const isFollowed = fs.isFollowing(item.watchlist_payload);
+    const queueState = fs.getQueueState(item);
+
+    if (star) star.hidden = !isFollowed;
+    if (queuedDot) queuedDot.hidden = queueState !== 'queued';
+    if (downloadedDot) downloadedDot.hidden = queueState !== 'downloaded';
+    if (indContainer) {
+        indContainer.hidden = !(isFollowed || queueState !== 'none');
+    }
+
+    // Queue button vanishes once queued (any state). The space simply
+    // collapses — no jumping; Follow link reflows naturally.
+    if (queueBtn) queueBtn.hidden = (queueState !== 'none');
+
+    // Follow link visual state mirrors star.
+    if (followLink) {
+        if (isFollowed) {
+            followLink.classList.add('cf-d-card-follow-active');
+            const labelSpan = followLink.querySelectorAll('span')[1];
+            if (labelSpan) labelSpan.textContent = 'Following';
+        } else {
+            followLink.classList.remove('cf-d-card-follow-active');
+        }
+    }
 }
 
 function skeletonCard(aspectClass) {
@@ -223,6 +280,13 @@ async function loadCategoryRow(rowEl, cat, msg) {
             try { card.dataset.payload = JSON.stringify(items[i]); } catch (_) {}
         });
         status.textContent = items.length + (items.length === 1 ? ' item' : ' items');
+        // Mark cards whose author/series the user already follows.
+        try {
+            const cb2 = '?cb=' + Date.now();
+            const fs = await import('./follow_state.js' + cb2);
+            scroller.querySelectorAll('.cf-d-card[data-source-id]').forEach((c) =>
+                _refreshCardState(c, fs));
+        } catch (_) {}
         // Refresh arrow disabled state once content has rendered
         requestAnimationFrame(() => updateRowArrows(rowEl));
     } catch (err) {
@@ -281,12 +345,16 @@ async function handleAddToQueue(card, msg) {
         showToast(`Can't queue ${title} — missing identifier.`);
         return;
     }
-    const btn = card.querySelector('.cf-d-card-cta');
     try {
         const res = await api.queueAdd(body);
         const existed = res && res.existed === true;
         showToast(existed ? `Already in your queue: ${title}` : `Queued: ${title}`);
-        markQueued(btn, existed ? 'In queue' : 'Queued');
+        // Update central state — dispatches cypherflix:queued; the listener
+        // hides the Queue button on this AND every other card pointing at
+        // the same source_id.
+        const cb = '?cb=' + Date.now();
+        const fs = await import('./follow_state.js' + cb);
+        fs.markQueued(item, res && res.status ? res.status : 'wanted');
         if (msg) msg.textContent = '';
     } catch (err) {
         const m = String(err && err.message || err);
@@ -296,23 +364,36 @@ async function handleAddToQueue(card, msg) {
 }
 
 async function handleFollow(card, target) {
-    // target is one of the watchlist_payloads exposed by the discover item
-    // (legacy single-target) or by the Item Detail endpoint (named targets).
     if (!target) return;
     const name = target.display_name || 'this';
     try {
         const res = await api.createFollowing(target);
         const existed = res && res.existed === true;
         showToast(existed ? `Already following: ${name}` : `Following: ${name}`);
-        // Mark the follow link visually if it lives on the card.
-        const link = card && card.querySelector('.cf-d-card-follow');
-        if (link) {
-            link.textContent = existed ? 'Following' : 'Following ✓';
-            link.classList.add('cf-d-card-follow-active');
-        }
+        // Update central state + dispatch event so every other visible card
+        // by the same author/series re-renders its Follow link.
+        const cb = '?cb=' + Date.now();
+        const fs = await import('./follow_state.js' + cb);
+        fs.markFollowed(target);
     } catch (err) {
         const m = String(err && err.message || err);
         showToast(`Couldn't follow ${name}: ${m}`);
+    }
+}
+
+function _refreshCardFollowState(card, isFollowingFn) {
+    const link = card.querySelector('.cf-d-card-follow');
+    if (!link) return;
+    let payload = null;
+    try { payload = JSON.parse(card.dataset.payload || '{}').watchlist_payload; } catch (_) {}
+    if (!payload) return;
+    if (isFollowingFn(payload)) {
+        link.classList.add('cf-d-card-follow-active');
+        // Replace the inner text node only, preserve the icon span.
+        const labelSpan = link.querySelectorAll('span')[1];
+        if (labelSpan) labelSpan.textContent = 'Following';
+    } else {
+        link.classList.remove('cf-d-card-follow-active');
     }
 }
 
@@ -348,6 +429,12 @@ async function runSearch(host, query, kind, msg) {
         });
         host.innerHTML = '';
         host.appendChild(grid);
+        try {
+            const cb = '?cb=' + Date.now();
+            const fs = await import('./follow_state.js' + cb);
+            grid.querySelectorAll('.cf-d-card[data-source-id]').forEach((c) =>
+                _refreshCardState(c, fs));
+        } catch (_) {}
     } catch (err) {
         host.innerHTML = '<div class="cf-d-row-empty">Error: ' + escapeHtml(err.message || String(err)) + '</div>';
     }
@@ -356,7 +443,26 @@ async function runSearch(host, query, kind, msg) {
 // --- entry point ----------------------------------------------------------
 
 export async function render(root) {
-    ({ api } = await import('./api.js?cb=' + Date.now()));
+    const _cb = '?cb=' + Date.now();
+    ({ api } = await import('./api.js' + _cb));
+
+    // v3.0.1: prime the follow-state cache so cards render their Follow link
+    // pre-marked when the user already follows the target. Fire-and-forget —
+    // if it hasn't loaded by render time, cards re-mark on the next event.
+    const followState = await import('./follow_state.js' + _cb);
+    followState.loadFollowing();
+
+    // Re-render Follow chips on every visible card whenever the central
+    // state flips. Covers: initial load resolve, follow from a peer card,
+    // follow from the Item Detail modal.
+    document.addEventListener('cypherflix:followed', () => {
+        root.querySelectorAll('.cf-d-card[data-source-id]').forEach((c) =>
+            _refreshCardFollowState(c, followState.isFollowing));
+    });
+    document.addEventListener('cypherflix:unfollowed', () => {
+        root.querySelectorAll('.cf-d-card[data-source-id]').forEach((c) =>
+            _refreshCardFollowState(c, followState.isFollowing));
+    });
 
     root.classList.add('cf-host', 'cf-discover-host');
     root.innerHTML = `

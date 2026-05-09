@@ -47,9 +47,14 @@ function renderRow(row) {
     const icon = KIND_ICON[row.kind] || 'collections_bookmark';
     const kindLabel = KIND_LABEL[row.kind] || row.kind;
     const monitor = MONITOR_LABEL[row.monitor_mode] || row.monitor_mode;
+    // v3.0.1: prefer the upstream picture (author portrait or series cover)
+    // when /following exposed one; fall back to a kind-icon avatar otherwise.
+    const avatar = row.picture_url
+        ? '<div class="cf-fol-avatar"><img src="' + escapeHtml(row.picture_url) + '" alt="" loading="lazy" /></div>'
+        : '<div class="cf-fol-icon"><span class="material-icons">' + icon + '</span></div>';
     return `
         <div class="cf-fol-row" data-id="${row.id}">
-            <div class="cf-fol-icon"><span class="material-icons">${icon}</span></div>
+            ${avatar}
             <div class="cf-fol-body">
                 <div class="cf-fol-name">${escapeHtml(row.display_name)}</div>
                 <div class="cf-fol-meta">
