@@ -74,6 +74,17 @@ export function renderCard(opts: CardOpts): string {
     const subtitle = subtitleFor(item);
 
     const imageUrl = item.cover_url ?? '';
+    // Cover image: we set `background-image` inline rather than relying on
+    // Jellyfin's `lazyLoader` (which observes `class="lazy"`+`data-src=`).
+    // The lazy loader is registered at app boot and observes content under
+    // Jellyfin's main shell; content rendered into the Plugin-Pages
+    // user-settings container is outside its scope, so cards rendered there
+    // never get their data-src promoted to a background-image and the
+    // poster slot stays blank. Inline style sidesteps the observer.
+    // We keep `class="lazy"` + `data-src=…` for forward compat (and so any
+    // theme rule keyed on `.lazy` still applies) — they're harmless when
+    // the inline style already paints the image.
+    const imageStyle = imageUrl ? ` style="background-image: url('${escapeAttr(imageUrl)}');"` : '';
     // We tag the outer with our own data-cypherflix-* attributes so click
     // delegation knows where to dispatch (queue add vs navigate).
     return (
@@ -89,6 +100,7 @@ export function renderCard(opts: CardOpts): string {
         ` class="cardImageContainer coveredImage cardContent itemAction lazy"` +
         ` data-action="link"` +
         (imageUrl ? ` data-src="${escapeAttr(imageUrl)}"` : '') +
+        imageStyle +
         ` aria-label="${escapeAttr(title)}" role="img"></a>` +
         `<div class="cardOverlayContainer itemAction" data-action="link">` +
         fabHtml +

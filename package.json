@@ -1,6 +1,6 @@
 {
   "name": "jellyfin-plugin-cypherflix-hub-web",
-  "version": "4.0.0",
+  "version": "4.0.1",
   "private": true,
   "description": "Frontend bundle for the Cypherflix Hub Jellyfin plugin. Source-of-truth lives in TypeScript here; Vite produces a single hashed bundle that the C# build embeds as a resource in the plugin DLL.",
   "type": "module",
