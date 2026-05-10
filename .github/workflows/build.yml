@@ -33,6 +33,31 @@ jobs:
         with:
           dotnet-version: 9.0.x
 
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install web deps
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck (strict)
+        run: npx tsc --noEmit
+
+      - name: Build web bundle (Vite)
+        run: npm run build
+
+      - name: Verify dist contents
+        run: |
+          set -euo pipefail
+          ls -la Web/dist/
+          # The single-bundle Vite config produces exactly one .js + one .css
+          # plus a manifest.json. If any are missing, fail loudly here.
+          test -f Web/dist/manifest.json
+          test "$(ls Web/dist/*.js | wc -l)" -ge 1
+          test "$(ls Web/dist/*.css | wc -l)" -ge 1
+
       - name: Read version from csproj
         id: version
         run: |

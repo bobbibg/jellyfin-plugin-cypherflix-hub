@@ -1,519 +1,369 @@
 # Cypherflix Hub — Architecture
 
-This document is the **single source of truth** for the design of
-`jellyfin-plugin-cypherflix-hub`. Every task spec in `tasks/` references
-sections here. If a task spec contradicts this document, the document wins.
+> **Single source of truth for the plugin's design**. If a task spec or
+> code comment contradicts this document, the document wins. Update this
+> first, then the code.
+>
+> Every external surface referenced here (Jellyfin's `ApiClient`, the
+> Plugin Pages plugin, native class chains, the grabber API) is verified
+> against primary source. Citations live in `.recon/`. Don't add a new
+> claim here without one.
 
-If you are an agent picking up a task, the reading order is:
+## North Star
 
-1. `JELLYFIN-INTEGRATION.md` — every Jellyfin / third-party class name,
-   namespace, and API surface this plugin depends on, with sources. **Do not
-   invent class names that aren't in that doc — add them there with citations
-   first if you need new ones.**
-2. This file (`ARCHITECTURE.md`) — the overall design.
-3. Your task spec under `tasks/`.
-4. The existing code under `Jellyfin.Plugin.CypherflixHub/`.
+**One plugin, one backend, all media kinds.** Cypherflix Hub (Jellyfin
+plugin) is the single UI front for `cypherflix-grabber` (Python/FastAPI
+service), which owns metadata, follow / queue / search / grab pipelines for
+books, comics, audiobooks, music, movies, TV, and anime. C# integration via
+`IRemoteMetadataProvider` makes Jellyfin library scans pull through us.
+Sonarr / Radarr / Lidarr / Mylar3 are migrated off once each kind reaches
+parity.
 
----
+## Versions we target (verified)
 
-## 1. What this plugin does
+- **Jellyfin server:** 10.11.8 (`/System/Info/Public` on the NAS, May 2026).
+- **`jellyfin-apiclient`:** 1.11.0 (bundled into jellyfin-web 10.11.8).
+- **Plugin Pages plugin:** 2.4.9.0, GUID `5b6550fa-a014-4f4c-8a2c-59a43680ac6d`,
+  hard-depends on File Transformation `5e87cc92-571a-4d8d-8d98-d2d4147f9f90`.
+- **`cypherflix-grabber`:** 2.0.0 (FastAPI, OpenAPI at `/openapi.json`,
+  external on `http://192.168.1.165:7960`).
 
-It replaces the Requests and Calendar tabs that JF Enhanced provides, but
-generalised over multiple **providers** instead of being hardwired to
-Jellyseerr. It also adds a **Discover** tab with unified search backed by
-Meilisearch.
-
-Concretely the plugin ships:
-
-| Tab | Source | Notes |
-|---|---|---|
-| **Discover** | Meilisearch index of all providers + Jellyfin library | Live search, type filters, "Request" / "Play" buttons |
-| **Requests** | All providers' `GetRequestStatusesAsync` aggregated | Replaces JF Enhanced Requests |
-| **Calendar** | All providers' `GetCalendarAsync` aggregated | Replaces JF Enhanced Calendar |
-| **Plugin settings page** (admin) | Native Jellyfin plugin config | Add/edit provider instances + Meilisearch URL |
-
-The design goal: **adding a new provider type is one new C# class + one DI
-registration line.** No changes to controllers, no changes to UI, no DB
-migrations. The admin enables an instance, configures it, and it appears
-everywhere automatically.
-
----
-
-## 2. Repo layout
+## Repository layout
 
 ```
 jellyfin-plugin-cypherflix-hub/
-├── ARCHITECTURE.md                      ← this file
-├── PROMPTS.md                           ← agent invocation templates
-├── README.md
-├── manifest.json                        ← Jellyfin plugin catalogue manifest
-├── tasks/                               ← per-task specs (one md per agent run)
-│   ├── CORE-*.md                        (foundations — done)
-│   ├── PROV-*.md                        (provider implementations)
-│   ├── SVC-*.md                         (services: Meilisearch, indexer, aggregators)
-│   ├── API-*.md                         (controllers exposed to the web UI)
-│   └── UI-*.md                          (web UI tabs + admin page)
-├── .github/workflows/build.yml          ← CI: builds .dll + zip + bumps manifest
-└── Jellyfin.Plugin.CypherflixHub/
-    ├── Jellyfin.Plugin.CypherflixHub.csproj
-    ├── Plugin.cs                        ← BasePlugin entry
-    ├── PluginServiceRegistrator.cs      ← DI wiring
-    ├── Configuration/
-    │   ├── PluginConfiguration.cs
-    │   └── configPage.html              ← native admin settings page
-    ├── Core/                            ← provider abstraction + shared models
-    │   ├── IMediaProvider.cs            ← THE central contract
-    │   ├── ProviderRegistry.cs
-    │   ├── ProviderConfig.cs
-    │   ├── ConfigField.cs
-    │   ├── MediaType.cs
-    │   ├── Capability.cs
-    │   └── Models.cs
-    ├── Providers/                       ← one folder per provider implementation
-    │   ├── Jellyfin/                    (PROV-001)
-    │   ├── Jellyseerr/                  (PROV-002)
-    │   ├── Readarr/                     (PROV-003)
-    │   └── ...
-    ├── Services/
-    │   ├── MeilisearchClient.cs         (SVC-001)
-    │   ├── IndexerService.cs            (SVC-002)
-    │   ├── FileTransformationRegistrar.cs (SVC-005 — replaces ScriptInjector;
-    │   │                                   uses File Transformation plugin)
-    │   ├── IndexHtmlTransform.cs        (SVC-005 — static callback target)
-    │   └── Aggregators/
-    │       ├── SearchAggregator.cs      (SVC-003)
-    │       ├── RequestAggregator.cs     (SVC-004)
-    │       └── CalendarAggregator.cs    (SVC-004)
-    ├── Api/                             ← ASP.NET controllers (web API the UI calls)
-    │   ├── ProvidersController.cs       (API-001)
-    │   ├── SearchController.cs          (API-002)
-    │   ├── RequestsController.cs        (API-003)
-    │   ├── CalendarController.cs        (API-004)
-    │   └── WebController.cs             (API-005 — serves bootstrap.js + page modules)
-    └── Web/                             ← embedded JS/CSS/HTML for the UI
-        ├── inject.js                    ← bootstraps everything (UI-001)
-        ├── styles.css
-        ├── pages/
-        │   ├── discover.js              (UI-003)
-        │   ├── requests.js              (UI-004)
-        │   └── calendar.js              (UI-005)
-        └── admin/
-            └── configPage.js            (UI-002)
+├── Jellyfin.Plugin.CypherflixHub/      ← C# plugin project (compiles to DLL)
+│   ├── Api/                            ← server-side controllers
+│   │   ├── WebController.cs            ← serves dist/* + the page HTML fragments
+│   │   └── ProxyController.cs          ← /Cypherflix/api/* → grabber /api/v1/*
+│   ├── Configuration/                  ← admin config UI
+│   ├── Services/                       ← C# services (grabber client)
+│   └── Plugin.cs                       ← ALSO writes Plugin Pages config.json
+│
+├── Web/                                ← TypeScript source for the frontend
+│   ├── bootstrap.ts                    ← single entry, dispatches by hash
+│   ├── components/                     ← shared UI primitives, native-class markup
+│   │   ├── card.ts                     ← single source of truth for card markup
+│   │   ├── carousel.ts                 ← verticalSection + emby-scroller pattern
+│   │   ├── detailPage.ts               ← native .itemDetailPage chrome
+│   │   ├── toast.ts                    ← singleton on document.body
+│   │   ├── indicators.ts
+│   │   ├── queueFab.ts
+│   │   └── candidatesModal.ts
+│   ├── pages/                          ← one per Plugin Page
+│   │   ├── discover.ts
+│   │   ├── queue.ts
+│   │   ├── following.ts
+│   │   └── detail.ts
+│   ├── state/
+│   │   ├── api.ts                      ← typed fetch wrappers (grabber)
+│   │   ├── followState.ts              ← in-memory state + CustomEvent bus
+│   │   └── jellyfin.ts                 ← ApiClient helpers (sessionReady, auth)
+│   ├── inject.ts                       ← native-page DOM injection (slim)
+│   ├── styles/main.css
+│   └── types/
+│       ├── api.ts                      ← cypherflix-grabber API shapes (verified)
+│       └── jellyfin.d.ts               ← ambient types for window.ApiClient (verified)
+│
+├── dist/                               ← (gitignored) Vite build output
+│   ├── cypherflix-hub.[hash].js        ← embedded as DLL resource
+│   ├── cypherflix-hub.[hash].css
+│   └── manifest.json                   ← C# resolves hashed names from this
+│
+├── package.json                        ← npm deps (vite, typescript, eslint)
+├── tsconfig.json                       ← strict TypeScript config
+├── vite.config.ts                      ← single hashed bundle config
+├── ARCHITECTURE.md                     ← this file
+├── ROADMAP.md                          ← long-term phase plan
+├── manifest.json                       ← Jellyfin plugin catalog entry
+└── .recon/                             ← verified surface citations (committed)
+    ├── apiclient-verification.md
+    ├── plugin-pages-verification.md
+    ├── native-classes-verification.md
+    ├── grabber-openapi-diff.md
+    └── grabber-openapi.json
 ```
 
----
+## Build pipeline
 
-## 3. Provider abstraction (the core)
+```
+┌─────────────┐    ┌────────────┐    ┌──────────────┐    ┌────────────────┐
+│ Web/**/*.ts │──▶ │ npm build  │──▶ │ dist/*.js+css│──▶ │ MSBuild embeds │
+└─────────────┘    │ (Vite)     │    │ + manifest   │    │ as resource    │
+                   └────────────┘    └──────────────┘    └────────────────┘
+```
 
-**File:** `Core/IMediaProvider.cs`
+1. `npm run build` — Vite bundles all `Web/**/*.ts` into a **single hashed
+   JS file + single hashed CSS file** under `dist/`. Manifest written to
+   `dist/manifest.json` mapping the entry to its hashed filename.
+2. MSBuild's `BeforeBuild` target runs the npm build automatically.
+3. The csproj's `<EmbeddedResource Include="dist/**" />` ships the bundle
+   inside the DLL.
+4. C# `WebController` reads `dist/manifest.json` at startup and exposes the
+   bundle at `/CypherflixHub/Web/{hashedName}`. Every build invalidates the
+   hash, which invalidates browser caches automatically.
 
-Every external service the user might want to search/request/calendar against
-implements `IMediaProvider`. There is **one C# class per provider TYPE**
-(`JellyseerrProvider`, `ReadarrProvider`, …). The admin can configure
-**multiple INSTANCES of a type** — e.g. two Readarrs (books + comics), each
-with its own URL and API key.
+The single-bundle choice is deliberate. Jellyfin's WebController exposes
+resources by static name; multi-chunk builds would need a routing layer
+that's not worth our scale.
 
-The interface has three groups of members:
+## Entry point — Plugin Pages (verified surface)
 
-### 3.1 Type metadata (static)
+We use [IAmParadox27's Plugin Pages 2.4.9.0](https://github.com/IAmParadox27/jellyfin-plugin-pages)
+(already installed on the NAS) to register sidebar entries. Full
+verification is in `.recon/plugin-pages-verification.md`; the summary
+below is what code must do.
 
-These describe the provider type itself and never change at runtime. The admin
-UI reads them when listing available types and rendering the per-instance
-config form.
+### The real `PluginPage` shape
+
+`Jellyfin.Plugin.PluginPages.Library.PluginPage` has **four** properties:
+
+| Property | Type | Purpose |
+|---|---|---|
+| `Id` | `string?` | Dedup key. We use namespaced ids: `Jellyfin.Plugin.CypherflixHub.Discover`, `…Queue`, `…Following`. |
+| `Url` | `string?` | URL that returns an HTML **fragment** to be appended into Jellyfin's `.userPluginSettingsContainer`. Plugin Pages 2.4.1.0+ auto-prefixes the Jellyfin base URL when `Url` starts with `/`. |
+| `DisplayText` | `string?` | Sidebar label. |
+| `Icon` | `string?` | Material Icons class name (e.g. `"explore"`). |
+
+There is **no** `Route`, `DisplayName`, `ScriptUrls`, or `StylesheetUrls`.
+Earlier drafts of this doc claimed those fields existed — they do not.
+
+### Why we cannot DI-inject `IPluginPagesManager`
+
+Plugin Pages registers `IPluginPagesManager` as a singleton in Jellyfin's
+DI container. **But** Jellyfin loads each third-party plugin into its own
+`AssemblyLoadContext`, so a consumer plugin asking for `IPluginPagesManager`
+gets either nothing (if the type identity doesn't match across ALCs) or a
+silent no-op. The only supported registration mechanism is the JSON
+drop-in below.
+
+### How `Plugin.cs` actually registers our pages
+
+Mirror IAmParadox27's own consumer plugin (Home Screen Sections). On
+construction, `Plugin.cs`:
+
+1. Computes the path
+   `<applicationPaths.PluginConfigurationsPath>/Jellyfin.Plugin.PluginPages/config.json`.
+2. Reads (or creates) the JSON; ensures a top-level `pages` array.
+3. For each of our pages, looks up an entry by `Id` and:
+   - If absent or its `"Version"` < our current `CYPHERFLIX_PAGE_CONFIG_VERSION`,
+     remove + re-add the entry.
+   - Else leave it alone.
+4. Writes the file back.
+
+Plugin Pages reads this file once, on its own startup, and registers each
+entry via its own DI'd manager. That means **the user must restart Jellyfin
+once after a plugin upgrade that bumps `CYPHERFLIX_PAGE_CONFIG_VERSION`**,
+which is unavoidable and matches HSS's behaviour.
+
+The only NuGet dep this needs is `Newtonsoft.Json`; do **not** add a
+`<PackageReference>` for Plugin Pages itself (no NuGet exists, and a direct
+assembly reference would cross the ALC boundary).
+
+### How HTML fragments get served
+
+Each `Url` we register points at a route on our own `WebController` that
+returns an **HTML fragment** (no `<!DOCTYPE>`, no `<html>`, no `<head>`).
+That fragment includes our `<script src="…">` and `<link rel="stylesheet" href="…">`
+tags pointing at the hashed bundle in `dist/`. The fragment's root element
+hosts whatever the page module renders.
 
 ```csharp
-string TypeId { get; }                              // "jellyseerr"
-string DisplayName { get; }                         // "Jellyseerr"
-string Description { get; }                         // shown when picking a type
-string? IconUrl { get; }
-IReadOnlyList<MediaType> SupportedMediaTypes { get; }       // [Movie, TvShow]
-IReadOnlyList<Capability> SupportedCapabilities { get; }    // [Search, Request, ...]
-IReadOnlyList<ConfigField> ConfigSchema { get; }            // form fields
-```
-
-### 3.2 Per-instance operations
-
-Each method takes a `ProviderConfig` (the hydrated config for one specific
-instance) so the provider class itself stays stateless.
-
-```csharp
-Task<TestResult>                       TestConnectionAsync(cfg, ct);
-Task<IReadOnlyList<SearchResult>>      SearchAsync(query, cfg, ct);
-Task<RequestSubmissionResult>          RequestAsync(payload, cfg, ct);
-Task<IReadOnlyList<RequestStatus>>     GetRequestStatusesAsync(userId, cfg, ct);
-Task<IndexBatch>                       IndexAsync(since, cfg, ct);
-Task<IReadOnlyList<CalendarEntry>>     GetCalendarAsync(query, cfg, ct);
-```
-
-### 3.3 Capability gating
-
-Providers declare which capabilities they support via
-`SupportedCapabilities`, and the admin can disable any of them per instance
-(stored in `ProviderInstance.EnabledCapabilities`).
-
-The framework **never calls a method whose capability is disabled**. Aggregators
-filter providers by capability before dispatching. This means:
-
-- A Spotify provider can declare only `Search` and `Discover` and never have
-  `RequestAsync` called.
-- A Readarr instance configured for "books only, no calendar" simply doesn't
-  show up in the calendar feed.
-- Implementations should still return safe empties (`Array.Empty<…>()`) for
-  unsupported capabilities in case the gate is bypassed.
-
-### 3.4 Provider implementation requirements
-
-Every provider must:
-
-1. **Be stateless.** All instance state comes through `ProviderConfig`. No
-   private fields holding URLs/keys.
-2. **Be resilient.** Network blips → return empty list, log warning, do not
-   throw out to the framework.
-3. **Be idempotent.** `RequestAsync` for an already-requested item returns
-   success with the existing status, not an error.
-4. **Translate to/from the unified models** in `Core/Models.cs`. Never leak
-   provider-specific types out of the provider folder.
-5. **Be registered as a singleton** in `PluginServiceRegistrator.cs`.
-
-See `tasks/PROV-*.md` for per-provider detail.
-
----
-
-## 4. Configuration storage
-
-### 4.1 Plugin-level config
-
-`Configuration/PluginConfiguration.cs` is the root of everything Jellyfin
-serialises to `plugins/CypherflixHub.xml`. It owns:
-
-```
-Providers[]              ← every configured instance (mixed types)
-MeilisearchUrl
-MeilisearchApiKey
-IndexIntervalMinutes
-```
-
-### 4.2 Per-instance config
-
-Each `ProviderInstance` carries:
-
-```
-Id                        Guid (stable across renames)
-TypeId                    "jellyseerr"
-Name                      "Movies (Jellyseerr)"
-Enabled                   bool
-EnabledCapabilities[]     subset of the type's SupportedCapabilities
-Config[]                  ConfigEntry[] {Key, Value} — keyed by ConfigField.Key
-```
-
-`ConfigEntry[]` is used instead of `Dictionary<string,string>` because the XML
-serialiser produces ugly `<Items><Item><Key>…` for dicts. The plain array
-serialises cleanly.
-
-### 4.3 Hydrated config (`ProviderConfig`)
-
-When the framework calls a provider method, it builds a `ProviderConfig` with:
-
-- `InstanceId`, `InstanceName`
-- `EnabledCapabilities` as a `HashSet<Capability>`
-- `Fields` as `Dictionary<string,string>`
-
-Providers use `cfg.Get("api_key")` / `cfg.GetOrDefault("url", "https://…")`.
-
----
-
-## 5. Meilisearch indexing
-
-### 5.1 Per-provider indexes
-
-Each provider instance gets its own Meilisearch index, named:
-
-```
-cypherflix_<providerTypeId>_<instanceId-short>
-```
-
-e.g. `cypherflix_readarr_a1b2c3d4`. This keeps batch deletes simple
-(`Replace = true` clears the index for that instance) and means one provider
-choking doesn't poison the others.
-
-The unified search aggregator queries all of them in parallel and merges
-results, so the UI never has to know there are multiple indexes.
-
-### 5.2 Document schema
-
-Documents are uniform across providers — see `IndexDocument` in
-`Core/Models.cs`. Fields include `Id`, `MediaType`, `Title`, `Subtitle`,
-`Description`, `PosterUrl`, `Year`, `Tags`, `Extras` (provider-specific KV).
-
-Meilisearch settings (per index, set at creation time):
-
-```json
-{
-  "searchableAttributes": ["title", "subtitle", "description", "tags"],
-  "filterableAttributes": ["mediaType", "year", "tags"],
-  "sortableAttributes": ["year"],
-  "displayedAttributes": ["*"]
+// Schematic — final shape lives in WebController.cs
+[HttpGet("CypherflixHub/discover")]
+public IActionResult Discover() {
+    string js  = WebController.GetBundleUrl() + ".js";
+    string css = WebController.GetBundleUrl() + ".css";
+    string html = $@"
+<link rel=""stylesheet"" href=""{css}"" />
+<script src=""{js}"" type=""module""></script>
+<div id=""cypherflix-hub-root"" data-page=""discover""></div>";
+    return Content(html, "text/html; charset=utf-8");
 }
 ```
 
-### 5.3 Indexer service
+The TS bootstrap reads `data-page` off `#cypherflix-hub-root` and
+dispatches into the matching page module.
 
-`Services/IndexerService.cs` is a `BackgroundService` that wakes every
-`IndexIntervalMinutes`, iterates configured + enabled instances with the
-`Index` capability, calls `IndexAsync(since: lastRun, cfg, ct)`, applies the
-returned `IndexBatch` to the per-instance index, and stores the new "since"
-timestamp.
+## Component contract
 
-It also runs once on startup. See `tasks/SVC-002.md`.
+Every component in `Web/components/` exports:
 
-### 5.4 Jellyfin library indexing
+```ts
+export interface ComponentRenderOpts<T> {
+    item: T;
+    // …kind-specific options
+}
 
-The user's existing Jellyfin library is itself a provider — see
-`Providers/Jellyfin/JellyfinProvider.cs` (PROV-001). This is what powers the
-"Play" button in Discover when a search hit is already in the library.
-
----
-
-## 6. Aggregators
-
-Three aggregators sit between the controllers and the providers. They are
-singletons.
-
-### 6.1 SearchAggregator (`SVC-003`)
-
-Queries Meilisearch (which already contains every provider's index) and
-post-processes:
-
-1. Decorate hits with `InLibrary=true` + `JellyfinItemId` if the matching
-   Jellyfin index has them.
-2. Decorate hits with `RequestPending=true` if the user has an open request
-   in any request-capable provider for the same `ExternalId`.
-3. Apply media-type filter, paginate.
-
-Live keyword search bypasses Meilisearch and fans out to providers' `SearchAsync`
-in parallel, then merges. (Meilisearch has the bulk catalogue; live `SearchAsync`
-exists for "request something not yet indexed" — e.g. a brand new movie.)
-
-### 6.2 RequestAggregator (`SVC-004`)
-
-`GetForUserAsync(userId, ct)` → fans out across all providers with
-`RequestStatus` capability, returns merged list grouped by media type.
-
-`SubmitAsync(providerInstanceId, payload, ct)` → resolves to one provider,
-calls `RequestAsync`.
-
-### 6.3 CalendarAggregator (`SVC-004`)
-
-`GetAsync(start, end, userId, ct)` → fans out, merges, sorts by
-`ReleaseDate`. Returns a flat list; the UI groups by date.
-
-All aggregators **fail gracefully**: a provider erroring out is logged and its
-contribution dropped; the rest still return.
-
----
-
-## 7. Web API (controllers)
-
-All under `/CypherflixHub/...`, all return JSON, all require an
-authenticated Jellyfin user (use `[Authorize]` + claim parsing — DO NOT use
-`[Authorize(Policy="DefaultAuthorization")]`, see "Lessons learned" below).
-
-| Route | Method | Purpose | Task |
-|---|---|---|---|
-| `/CypherflixHub/Providers` | GET | All available types + configured instances. Admin only. | API-001 |
-| `/CypherflixHub/Providers/Types` | GET | Available provider types (metadata only). Admin only. | API-001 |
-| `/CypherflixHub/Providers/Test` | POST | Test a config against a type before saving. Admin only. | API-001 |
-| `/CypherflixHub/Search?q=…&types=…` | GET | Unified search. Authed user. | API-002 |
-| `/CypherflixHub/Requests` | GET | Current user's requests across providers. | API-003 |
-| `/CypherflixHub/Requests` | POST | Submit a request. Body: RequestPayload. | API-003 |
-| `/CypherflixHub/Calendar?start=…&end=…&types=…` | GET | Calendar entries in window. | API-004 |
-
-Admin-only endpoints check the `Jellyfin-IsAdministrator` claim manually
-inside the action — see SendToKindle plugin v1.1.x for the proven pattern.
-
----
-
-## 8. Web UI
-
-### 8.1 Injection strategy
-
-We use the **File Transformation plugin** (mandatory dependency) — the same
-mechanism Custom Tabs, Plugin Pages, and Home Sections use. We do **not**
-patch `index.html` on disk ourselves (that's brittle on JF updates) and we
-do **not** depend on Custom Tabs (no programmatic API) or Plugin Pages (no
-programmatic API yet).
-
-See `JELLYFIN-INTEGRATION.md` §2 for the verbatim reflection registration
-recipe and §7 for the full SPA injection plan.
-
-The flow:
-
-1. `Services/FileTransformationRegistrar.cs` (`SVC-005`) is an
-   `IHostedService`. On `StartAsync` it uses the reflection recipe from
-   `JELLYFIN-INTEGRATION.md` §2.2 to register one transformation:
-   - `FileNamePattern`: regex matching `index.html`
-   - `CallbackAssembly` / `CallbackClass` / `CallbackMethod`: our static
-     transformation method
-2. The static method receives `JObject { contents: "<index.html>" }` and
-   returns the same JSON with `<script src="/CypherflixHub/Web/bootstrap.js" defer></script>`
-   inserted before `</body>` (idempotent — guard with a marker comment).
-3. `bootstrap.js` (served by `Api/WebController.cs` from an embedded
-   resource) waits for the Jellyfin SPA to mount, then:
-   - Inserts three tab buttons into the native title-bar tab strip with the
-     same classes Jellyfin uses (verify selector in `JELLYFIN-INTEGRATION.md`
-     §8 open question #2 before coding).
-   - Registers hash-route handlers for `#/cypherflix/discover`,
-     `…/requests`, `…/calendar`.
-   - On route match, fetches the page-specific module from
-     `/CypherflixHub/Web/pages/<name>.js`, evaluates it, and renders into
-     the main view container (Jellyfin uses `.skinBody` / `.mainAnimatedPages`
-     — confirm during implementation).
-
-Pages call the controllers in §7 via the existing `ApiClient` global so they
-inherit auth headers automatically.
-
-### 8.2 Pages
-
-- **Discover** (`UI-003`): search bar (debounced), type-filter chips, infinite
-  grid of result cards. Card actions: Play (if `InLibrary`), View Status (if
-  `RequestPending`), Request (otherwise).
-- **Requests** (`UI-004`): grouped by provider type. Each row shows status
-  pill, progress bar (if `InProgress`), poster, title.
-- **Calendar** (`UI-005`): month grid. Day cells list scheduled releases.
-  "Today" highlighted. Click a row → opens Jellyfin item if available, else
-  external provider URL.
-
-### 8.3 Admin page (`UI-002`)
-
-Native Jellyfin plugin settings page (already wired up via `Plugin.cs:GetPages`,
-`MenuSection = "server"`). Uses **only** the web components, CSS classes, and
-JS globals listed in `JELLYFIN-INTEGRATION.md` §4 — no invented names.
-
-Page root must be:
-```html
-<div data-role="page"
-     class="page type-interior pluginConfigurationPage"
-     data-require="emby-input,emby-button,emby-select,emby-checkbox,emby-textarea">
+export function render(opts: ComponentRenderOpts<T>): string;
+export function mount(host: HTMLElement, opts: ComponentRenderOpts<T>): void;
+export function refreshState(host: HTMLElement, fs: FollowState): void;
 ```
 
-Form rows follow the canonical pattern (verbatim from
-`JELLYFIN-INTEGRATION.md` §4.1):
+Pages consume only these exports — no inline markup. If `card.ts` is the
+sole producer of card markup, every page renders identical cards by
+construction. No drift.
 
-```html
-<div class="inputContainer">
-    <label class="inputLabel inputLabelUnfocused" for="X">Label</label>
-    <input is="emby-input" type="text" id="X" />
-    <div class="fieldDescription">Helper text</div>
-</div>
-```
+## Native class chains (verified)
 
-Use `var(--jf-palette-*, fallback)` for any custom colours so the page
-matches the active theme.
+The components mirror Jellyfin 10.11.8's home page exactly, so themes
+apply automatically. Full citations with line numbers are in
+`.recon/native-classes-verification.md`. Key facts that earlier drafts
+got wrong:
 
-Sections:
+- **`verticalSection` is the outer wrapper.** `emby-scroller-container`
+  is added to the `emby-scroller`'s parent **at upgrade time** by the
+  custom-element constructor — we do not write that class ourselves.
+- **Title containers vary by row type.** LatestMedia / "Latest in X" rows
+  use `<div class="sectionTitleContainer sectionTitleContainer-cards padded-left"><h2>…</h2></div>`.
+  Resume / NextUp rows use a **bare** `<h2 class="sectionTitle sectionTitle-cards padded-left">`.
+- **Cards.** Outer chain is
+  `<div class="card overflowPortraitCard card-hoverable card-withuserdata" data-action="link">`.
+  Image is set via `data-src` on `.cardImageContainer` and the lazy loader
+  paints it as `background-image` — there is no `<img>` tag.
+- **Hover overlay.** Native uses `<button is="paper-icon-button-light"
+  class="cardOverlayButton cardOverlayButton-hover cardOverlayFab-primary">`
+  with the icon set in **codepoint mode** (`<span class="material-icons
+  play_arrow" aria-hidden="true"></span>` — empty body, the class carries
+  the codepoint). Our queue FAB swaps `play_arrow` for `queue`.
+- **Card hover is pure CSS.** No JS class toggling. The `card-hoverable`
+  ancestor + Jellyfin's stylesheet do the work.
+- **Indicators live in `.cardIndicators`** (sibling of `.cardScalable`),
+  not inside any overlay button.
+- **Item detail page.** Outer chain is `<div id="itemDetailPage" class="page
+  libraryPage itemDetailPage noSecondaryNavPage selfBackdropPage">`. The
+  action bar is `<div class="mainDetailButtons focuscontainer-x">` (NOT
+  `.detailButtons`). Each button is `<button is="emby-button" class="button-flat
+  detailButton">` with **only** `<div class="detailButton-content"><span
+  class="material-icons detailButton-icon ${icon}"></span></div>` —
+  10.11.8 dropped the `<div class="detailButton-text">` label, label is
+  carried as the button's `title` attribute (tooltip).
+- **Toast.** Singleton `<div class="toastContainer">` mounted on
+  `document.body` (not inside the page). Per-toast `<div class="toast">`
+  uses textContent. Lifecycle: `+toastVisible` at 300 ms, `+toastHide` at
+  3300 ms, remove at 3600 ms.
 
-1. **Meilisearch** — URL, API key, index interval. Test button.
-2. **Providers** — list of configured instances with edit/delete. Add button
-   opens a modal: pick type from dropdown → render fields from
-   `ConfigSchema` → Test button → Save.
+## State management
 
-Use `Dashboard.showLoadingMsg()` / `hideLoadingMsg()` and
-`Dashboard.processPluginConfigurationUpdateResult(...)` for feedback,
-`Dashboard.alert(...)` for errors. `ApiClient.getPluginConfiguration(GUID)`
-and `ApiClient.updatePluginConfiguration(GUID, cfg)` for the round trip.
+Two flavours:
 
----
+**Per-session state** (`Web/state/followState.ts`):
+- Followed author / series ids
+- Queue request status by external id (book id, comic issue id, etc.)
+- Loaded once per page load via parallel `/following` + `/requests`
+- Mutated via `markFollowed`, `markUnfollowed`, `markQueued`
+- Each mutation dispatches a `cypherflix:*` CustomEvent on `document`. Every
+  visible component re-renders without re-fetching.
 
-## 9. Plugin lifecycle
+**Per-render derived state** (component-local):
+- e.g., a card's "is this followed?" — recomputed from followState whenever
+  the card mounts or an event fires.
 
-1. `Plugin.cs` is constructed by Jellyfin at startup. `Instance` static is
-   set so other classes can read config without DI gymnastics.
-2. `PluginServiceRegistrator.RegisterServices` runs during DI build:
-   - `ProviderRegistry` (singleton)
-   - Every `IMediaProvider` implementation (singleton)
-   - `MeilisearchClient` (singleton)
-   - `IndexerService` (hosted)
-   - `SearchAggregator`, `RequestAggregator`, `CalendarAggregator` (singletons)
-   - `ScriptInjector` (hosted)
-3. `IndexerService.StartAsync` runs an immediate index pass, then loops on
-   the configured interval.
-4. Jellyfin auto-discovers controllers under `Api/`.
+Deliberately no global store framework. At our scale the CustomEvent bus +
+module-scoped state is enough.
 
----
+## API client + auth
 
-## 10. Lessons learned (from the SendToKindle plugin)
+`Web/state/api.ts` wraps every grabber endpoint with typed fetch helpers.
+Types come from `Web/types/api.ts` — verified against the live grabber's
+OpenAPI document and live response samples. See
+`.recon/grabber-openapi-diff.md` for the full diff. Codegen via
+`openapi-typescript` is **deferred to v4.1**: the grabber's FastAPI routes
+do not yet declare `response_model=…`, so OpenAPI cannot describe response
+shapes; once the grabber is annotated, codegen becomes viable.
 
-These bit us on the previous plugin and **must not** be repeated here.
+Auth flow:
+1. `window.ApiClient.accessToken()` provides the user's Jellyfin token.
+2. Forwarded as `X-Emby-Token` to the plugin's reverse-proxy
+   `WebController` route (`/Cypherflix/api/...`).
+3. C# verifies the token (`[Authorize]`), then calls grabber's
+   `/api/v1/...` with the grabber API token.
 
-1. **Do NOT use `[Authorize(Policy = "DefaultAuthorization")]`.** The policy
-   isn't registered on Jellyfin 10.10/10.11 and every request 500s. Use bare
-   `[Authorize]` plus manual claim parsing (`User.FindFirst("Jellyfin-UserId")`,
-   `User.FindFirst("Jellyfin-IsAdministrator")`).
-2. **Set `<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>`** in
-   the csproj or transitive deps (Meilisearch, MailKit, etc.) won't be
-   shipped in the published bundle.
-3. **List third-party DLLs explicitly in `.github/workflows/build.yml`** when
-   producing the release zip — `dotnet publish` doesn't always include
-   everything we need at the top level. See SendToKindle v1.1.3 workflow for
-   the proven recipe.
-4. **`IPluginServiceRegistrator` lives in `MediaBrowser.Controller.Plugins`,
-   not `Jellyfin.Api.Helpers`.** The latter isn't on NuGet.
-5. **Embedded resources need exact namespace paths.** When referenced from
-   `Plugin.cs:GetPages`, the path is
-   `<RootNamespace>.<Folder>.<File>` with dots, e.g.
-   `Jellyfin.Plugin.CypherflixHub.Configuration.configPage.html`.
-6. **All script/CSS injection must run after Jellyfin's web app boots.** Use
-   `MutationObserver` on `document.body` or wait on
-   `window.ApiClient`.
+Plugin code never embeds the grabber token — it lives only in the C# side.
 
----
+`Web/types/jellyfin.d.ts` is grounded against unminified
+`jellyfin-apiclient` 1.11.0 source recovered from the npm tarball
+sourcemap. See `.recon/apiclient-verification.md`. Key signatures:
 
-## 11. Coding standards
+- `accessToken(): string | null` — synchronous, null when not logged in.
+- `getCurrentUser(enableCache?: boolean): Promise<User>`.
+- `getItem(userId: string | null | undefined, itemId: string)` — `userId`
+  is genuinely nullable.
+- `getItems(userId: string | null | undefined, options?)` — second param
+  is `options` (matching upstream), not `query`.
+- `getUrl(name, params?, serverAddress?)` — 3-arg, third arg is real.
+- `serverAddress(val?)` — single overloaded getter/setter.
 
-- C# 12, .NET 8, nullable enabled, file-scoped namespaces.
-- One public type per file (model classes can share if tightly coupled — see
-  `Models.cs`).
-- XML doc comments on every public member that another agent or future-you
-  would benefit from. Be terse but specific.
-- No `var` for primitive types where the type isn't obvious from the RHS.
-- Constructors take dependencies; no service locators except `Plugin.Instance`
-  for config.
-- Tests are not required for the first cut, but every aggregator method must
-  have at least a happy-path manual smoke (curl recipe in the task spec).
+Don't declare a method on `JellyfinApiClient` without a citation in
+`.recon/apiclient-verification.md`.
 
----
+## Native DOM injection (`inject.ts`)
 
-## 12. Adding a provider — step by step
+Independent of Plugin Pages. `MutationObserver` on `document.body` watches
+for Jellyfin's native pages — book detail, missing-item cards, etc. — and
+injects:
 
-1. Create `Providers/<Name>/` with these files:
-   - `<Name>Provider.cs` implementing `IMediaProvider`
-   - `<Name>Client.cs` for raw HTTP calls (keep `Provider.cs` thin)
-   - `<Name>Models.cs` for any DTO structs the client needs
-2. Register it in `PluginServiceRegistrator.cs`:
-   ```csharp
-   serviceCollection.AddSingleton<Core.IMediaProvider, Providers.<Name>.<Name>Provider>();
-   ```
-3. Bump version in `.csproj` and `manifest.json`.
-4. Push — CI builds the zip and updates `manifest.json` checksum.
+- Follow button on `.mainDetailButtons` (NOT `.detailButtons`) for book /
+  audiobook / comic detail pages where we can map the item to a Hardcover
+  author or ComicVine volume.
+- "More by Author" carousel section on book detail pages.
+- Queue button overlay on missing-item cards (top-right corner).
 
-That's it. The admin UI picks up the new type automatically the next time
-they open the settings page. No controller changes, no UI changes, no DB
-migrations.
+This continues to work alongside Plugin Pages — the two don't overlap:
+Plugin Pages handles OUR pages, inject.ts handles JELLYFIN's pages.
 
----
+## Strict TypeScript
 
-## 13. Versioning & release
+`tsconfig.json` enables every strictness flag we can stand:
 
-- Semantic versioning. Pre-1.0 means "any release can break things".
-- Manifest URL the user adds in Jellyfin:
-  `https://raw.githubusercontent.com/bobbibg/jellyfin-plugin-cypherflix-hub/main/manifest.json`
-- CI workflow (`build.yml`) is responsible for:
-  - Building the .dll
-  - Bundling it + transitive deps into a zip
-  - Computing the zip's MD5
-  - Updating `manifest.json` with the new version, MD5, sourceUrl
-  - Committing the manifest update back to `main`
-  - Creating a GitHub release with the zip attached
+- `strict: true` (rolls in `noImplicitAny`, `strictNullChecks`, etc.)
+- `noUncheckedIndexedAccess` — `arr[i]` returns `T | undefined`, must be
+  narrowed before use
+- `exactOptionalPropertyTypes` — `{ x?: T }` ≠ `{ x: T | undefined }`
+- `noUnusedLocals`, `noUnusedParameters`
+- `noFallthroughCasesInSwitch`
+- `useUnknownInCatchVariables`
 
-The SendToKindle plugin's workflow is the proven template — copy it, change
-names, done.
+This catches: forgetting `existed: true` paths, using fields that became
+optional, passing string where number was expected, dead code, fall-through
+switch bugs. Not a substitute for runtime testing — but kills the easy
+class of bugs at compile time.
+
+## What the C# side owns vs the TS side
+
+- **C# (server)**: Plugin registration via the Plugin Pages JSON drop-in,
+  reverse-proxy controller, configuration UI, file-transformation hooks,
+  metadata-provider implementations (v4.5+), HTML fragment routes that
+  load the bundle.
+- **TS (client)**: Every UI surface in the browser. Pages, components,
+  Jellyfin native-page injections, API client, state bus.
+
+Firewall: nothing in `Web/` mutates server state beyond what the public
+REST API permits. The C# side never inlines TS — only serves the
+precompiled bundle.
+
+## Long-term roadmap
+
+Each phase fits inside this skeleton without architectural change:
+
+| Version | Phase | Adds |
+|---|---|---|
+| **v4.0** | Stabilise | TypeScript + Vite + Plugin Pages config drop-in + componentised UI. Same backend. |
+| **v4.1** | Movies + codegen | TMDB client + movie matcher in grabber. Movie row on Discover. Grabber `response_model=…` everywhere; switch TS types to openapi-typescript codegen. |
+| **v4.2** | TV | TVDB / TMDB-TV clients. Per-episode + per-season requests. |
+| **v4.3** | Anime | AniList + nyaa indexers. Fansub-aware matcher. |
+| **v4.4** | Music | MusicBrainz + Spotify (optional). Album / artist follows. |
+| **v4.5** | Metadata Provider | C# `IRemoteMetadataProvider` for movies / TV / books. Jellyfin scans go through us. |
+| **v4.6** | File Organiser | Cypherflix-owned post-grab file-organisation pipeline. Replaces Sonarr/Radarr/Mylar3 organisers. |
+| **v5.0** | Servarr Deprecation | Migration tools. Stack-down. Endgame. |
+
+See `ROADMAP.md` for per-phase deliverables, risks, and time estimates.
+
+## v4.0 delivery checklist
+
+- [x] **Recon** — ApiClient surface, Plugin Pages surface, native class chains, grabber OpenAPI all verified
+- [x] **Day 1 (in progress)** — Vite + tsconfig + types/api.ts + types/jellyfin.d.ts + state/jellyfin.ts
+- [ ] **Day 1 (rest)** — state/api.ts (typed fetch wrapper), state/followState.ts, components/toast.ts, components/card.ts
+- [ ] **Day 2** — components/carousel.ts, components/detailPage.ts, components/queueFab.ts, components/indicators.ts, components/candidatesModal.ts, pages/{discover,queue,following,detail}.ts, inject.ts
+- [ ] **Day 3** — Plugin.cs Plugin Pages JSON drop-in. WebController fragment routes. MSBuild target. Drop Custom Tabs / JavaScript Injector deps for our pages.
+- [ ] **Day 4** — Cleanup. Playwright smoke test. Ship.

@@ -1,0 +1,384 @@
+/* Cypherflix Hub — page styles for v4.0
+ *
+ * Strategy: rely on Jellyfin's existing classes for everything visual.
+ * The native classes we re-use (verified in
+ * .recon/native-classes-verification.md):
+ *   - .verticalSection / .sectionTitleContainer / .sectionTitle / .sectionTitle-cards
+ *   - .card / .cardBox / .cardScalable / .cardPadder / .cardImageContainer
+ *   - .cardOverlayContainer / .cardOverlayButton-hover / .cardOverlayFab-primary
+ *   - .cardIndicators / .indicator
+ *   - .cardFooter / .cardText / .cardText-secondary
+ *   - .itemDetailPage / .detailRibbon / .mainDetailButtons / .detailButton
+ *   - .toast / .toastContainer / .toastVisible / .toastHide
+ *
+ * This file only adds cypherflix-specific selectors. We MUST NOT redefine
+ * native classes — that breaks user themes.
+ */
+
+/* ===== Page host ====================================================== */
+
+.cf-host {
+    position: relative;
+    padding-top: 8px;
+    padding-bottom: 40px;
+}
+
+/* The detail-route host is also the inject.ts More-by-author panel mount
+ * point — it sits inside Jellyfin's existing libraryPage container. */
+.cf-d-detail-route-host {
+    width: 100%;
+}
+
+/* ===== Discover ======================================================= */
+
+.cf-d-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.cf-d-search-icon {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.cf-d-search-input {
+    flex: 1 1 auto;
+    height: 40px;
+    padding: 0 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+    font-size: 14px;
+    font-family: inherit;
+}
+
+.cf-d-search-input:focus {
+    outline: none;
+    border-color: #00a4dc;
+}
+
+.cf-d-search-kind {
+    height: 40px;
+    padding: 0 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+    font-size: 14px;
+    font-family: inherit;
+}
+
+.cf-d-status-msg {
+    padding: 0 16px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 12px;
+    min-height: 16px;
+}
+
+.cf-d-row-loading,
+.cf-d-row-empty {
+    padding: 40px 24px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 13px;
+}
+
+.cf-d-row-loading .material-icons,
+.cf-d-row-empty .material-icons {
+    vertical-align: middle;
+    margin-right: 4px;
+}
+
+/* ===== Queue ========================================================== */
+
+.cf-q-tabs {
+    display: flex;
+    gap: 6px;
+    padding: 12px 16px 0;
+    max-width: 1400px;
+    margin: 0 auto;
+    flex-wrap: wrap;
+}
+
+.cf-q-tabs button {
+    padding: 8px 14px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.04);
+    color: #fff;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+}
+
+.cf-q-tabs button.active {
+    background: #00a4dc;
+    border-color: #00a4dc;
+}
+
+.cf-q-status-msg {
+    padding: 8px 16px 0;
+    max-width: 1400px;
+    margin: 0 auto;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 12px;
+    min-height: 16px;
+}
+
+.cf-q-rows {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.cf-q-row {
+    display: grid;
+    grid-template-columns: 64px 1fr auto auto;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.cf-q-row-cover img,
+.cf-q-row-cover .cf-q-poster-placeholder {
+    width: 64px;
+    height: 96px;
+    border-radius: 4px;
+    object-fit: cover;
+    background: rgba(255, 255, 255, 0.06);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cf-q-row-body {
+    min-width: 0;
+}
+
+.cf-q-row-title {
+    font-size: 14px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cf-q-row-subtitle {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    margin-top: 2px;
+}
+
+.cf-q-row-reason {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+    margin-top: 4px;
+}
+
+.cf-q-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.cf-q-pill-failed,
+.cf-q-pill-blocked {
+    background: rgba(239, 68, 68, 0.25);
+}
+
+.cf-q-row-actions {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.cf-q-iconbtn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cf-q-iconbtn:hover {
+    background: rgba(255, 255, 255, 0.16);
+}
+
+.cf-q-iconbtn-danger {
+    background: rgba(239, 68, 68, 0.2);
+}
+
+.cf-q-iconbtn-danger:hover {
+    background: rgba(239, 68, 68, 0.35);
+}
+
+.cf-q-loading,
+.cf-q-empty {
+    padding: 60px 24px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+/* ===== Following ======================================================= */
+
+.cf-fol-host {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 12px 16px;
+}
+
+.cf-fol-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.cf-fol-title {
+    margin: 0;
+    font-size: 18px;
+}
+
+.cf-fol-toolbar select {
+    height: 36px;
+    padding: 0 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+    font-size: 13px;
+    font-family: inherit;
+}
+
+.cf-fol-list {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.cf-fol-group-heading {
+    margin: 16px 0 4px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.cf-fol-row {
+    display: grid;
+    grid-template-columns: 56px 1fr auto;
+    gap: 12px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.03);
+    align-items: center;
+}
+
+.cf-fol-avatar img,
+.cf-fol-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: rgba(255, 255, 255, 0.06);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cf-fol-name {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.cf-fol-meta {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+    margin-top: 2px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.cf-fol-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.cf-fol-monitor {
+    height: 32px;
+    padding: 0 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+    font-size: 12px;
+    font-family: inherit;
+}
+
+.cf-fol-unfollow {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(239, 68, 68, 0.18);
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cf-fol-unfollow:hover {
+    background: rgba(239, 68, 68, 0.32);
+}
+
+.cf-fol-loading,
+.cf-fol-empty,
+.cf-fol-error {
+    padding: 60px 24px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+/* ===== Detail page ===================================================== */
+
+.cf-d-detail-loading,
+.cf-d-detail-error {
+    padding: 80px 24px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.cf-d-detail-action-active {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.cf-d-bib-rail {
+    margin-top: 24px;
+}
+
+/* ===== Inject — More-by-author panel on native book pages ============== */
+
+.cf-jf-moreby-host {
+    margin: 16px 0 24px;
+}

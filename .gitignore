@@ -2,6 +2,9 @@ bin/
 obj/
 out/
 dist/
+node_modules/
+.vite/
+*.tsbuildinfo
 *.user
 *.suo
 .vs/
@@ -9,3 +12,6 @@ dist/
 .idea/
 *.log
 .claude/
+
+# Vite manifest is regenerated on every build
+Web/types/api.generated.ts

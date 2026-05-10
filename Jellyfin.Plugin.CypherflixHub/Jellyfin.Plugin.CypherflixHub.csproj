@@ -3,14 +3,21 @@
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <RootNamespace>Jellyfin.Plugin.CypherflixHub</RootNamespace>
-    <AssemblyVersion>3.1.2.0</AssemblyVersion>
-    <FileVersion>3.1.2.0</FileVersion>
-    <Version>3.1.2</Version>
+    <AssemblyVersion>4.0.0.0</AssemblyVersion>
+    <FileVersion>4.0.0.0</FileVersion>
+    <Version>4.0.0</Version>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <ImplicitUsings>enable</ImplicitUsings>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <!--
+      The Vite build outputs into `Web/dist/` at the repo root (one level
+      above this csproj). MSBuild is happiest with a project-local path,
+      so we treat `..\Web\dist\` as our source of embedded JS/CSS.
+    -->
+    <CypherflixWebDist>$(MSBuildProjectDirectory)\..\Web\dist</CypherflixWebDist>
+    <CypherflixWebRoot>$(MSBuildProjectDirectory)\..</CypherflixWebRoot>
   </PropertyGroup>
 
   <ItemGroup>
@@ -21,9 +28,9 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!--
-      Newtonsoft.Json: required because the File Transformation plugin's
-      PluginInterface.RegisterTransformation takes a Newtonsoft.Json.Linq.JObject.
-      Runtime asset excluded so we don't ship a duplicate alongside the host's copy.
+      Newtonsoft.Json: required for File Transformation interop AND for our
+      Plugin Pages config.json file-drop in Plugin.cs. Runtime asset excluded
+      because the host already loads its own copy.
     -->
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3">
       <PrivateAssets>all</PrivateAssets>
@@ -31,9 +38,49 @@
     </PackageReference>
   </ItemGroup>
 
+  <!--
+    Embed only the Vite output and the admin config page. The TS source
+    tree under ../Web/{state,components,pages,types,styles} is NOT shipped —
+    only the compiled bundle is, with logical paths
+    `Web/dist/{cypherflix-hub.<hash>.js,...}` resolving to resource names
+    `Jellyfin.Plugin.CypherflixHub.Web.dist.cypherflix-hub.<hash>.js`.
+  -->
   <ItemGroup>
-    <EmbeddedResource Include="Web\**\*" />
+    <EmbeddedResource Include="$(CypherflixWebDist)\**\*">
+      <Link>Web\dist\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <LogicalName>Jellyfin.Plugin.CypherflixHub.Web.dist.$([System.String]::Copy('%(RecursiveDir)').Replace('\','.'))%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Configuration\*.html" />
   </ItemGroup>
+
+  <!--
+    Run `npm install` (only if node_modules is missing) and `npm run build`
+    before MSBuild starts compiling the C# side. Outputs land in
+    ../Web/dist/ so the EmbeddedResource glob above picks them up.
+
+    Skipped when the property `SkipNpmBuild=true` is passed (used in
+    `dotnet build -p:SkipNpmBuild=true` for fast iteration on C# alone).
+  -->
+  <Target Name="EnsureNpmInstall"
+          BeforeTargets="BuildNpmBundle"
+          Condition="'$(SkipNpmBuild)' != 'true' AND !Exists('$(CypherflixWebRoot)\node_modules\vite')">
+    <Message Text="Cypherflix: running npm install..." Importance="high" />
+    <Exec Command="npm install --no-audit --no-fund"
+          WorkingDirectory="$(CypherflixWebRoot)" />
+  </Target>
+
+  <Target Name="BuildNpmBundle"
+          BeforeTargets="BeforeBuild"
+          Condition="'$(SkipNpmBuild)' != 'true'">
+    <Message Text="Cypherflix: building Vite bundle..." Importance="high" />
+    <Exec Command="npm run build"
+          WorkingDirectory="$(CypherflixWebRoot)" />
+  </Target>
+
+  <Target Name="WarnIfNoBundle"
+          BeforeTargets="CoreCompile"
+          Condition="!Exists('$(CypherflixWebDist)\manifest.json')">
+    <Warning Text="Cypherflix: $(CypherflixWebDist)\manifest.json not found. The plugin will compile but will not serve a UI bundle. Run `npm run build` from the repo root, or rebuild without -p:SkipNpmBuild=true." />
+  </Target>
 
 </Project>

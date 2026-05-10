@@ -1,0 +1,43 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+
+    /* Strictness — the whole point of moving to TS. Bugs catchable at
+       compile time should never reach the bundle. */
+    "strict": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "noImplicitOverride": true,
+    "noImplicitThis": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": true,
+    "useUnknownInCatchVariables": true,
+
+    /* Output / module shape */
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "verbatimModuleSyntax": true,
+
+    /* Disable emit — Vite owns emission. tsc is for typechecking only. */
+    "noEmit": true,
+
+    /* Ergonomics */
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["Web/*"]
+    }
+  },
+  "include": ["Web/**/*.ts", "Web/**/*.d.ts", "vite.config.ts"],
+  "exclude": ["node_modules", "dist", "Jellyfin.Plugin.CypherflixHub/Web", ".claude"]
+}
